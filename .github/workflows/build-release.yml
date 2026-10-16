@@ -136,12 +136,14 @@ jobs:
             prerelease_flag="--prerelease"
           fi
 
-          # Only mark as "latest" when this is the current upstream stable release.
-          latest_flag=""
+          # Mark as "latest" only when this is the current upstream stable release.
+          # Otherwise explicitly mark as not-latest so backfilled older releases
+          # do not steal the Latest badge.
+          latest_flag="--latest=false"
           if [ "$is_prerelease" != "true" ]; then
             latest_upstream=$(gh api "repos/${UPSTREAM}/releases/latest" --jq '.tag_name')
             if [ "$VERSION" = "$latest_upstream" ]; then
-              latest_flag="--latest"
+              latest_flag="--latest=true"
             fi
           fi
 
