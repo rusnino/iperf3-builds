@@ -6,6 +6,10 @@ set -euo pipefail
 #   IPERF_VERSION=3.17.1 ./build-static.sh              # x86_64 (host musl-gcc)
 #   ARCH=aarch64 IPERF_VERSION=3.17.1 ./build-static.sh
 #   ARCH=armv7 IPERF_VERSION=3.17.1 ./build-static.sh
+#
+# Build with OpenSSL (RSA auth support):
+#   AUTH=true IPERF_VERSION=3.17.1 ./build-static.sh
+#   AUTH=true ARCH=aarch64 IPERF_VERSION=3.17.1 ./build-static.sh
 
 IPERF_VERSION="${IPERF_VERSION:-}"
 if [[ -z "$IPERF_VERSION" ]]; then
@@ -14,11 +18,16 @@ if [[ -z "$IPERF_VERSION" ]]; then
 fi
 
 ARCH="${ARCH:-x86_64}"
+AUTH="${AUTH:-}"
+AUTH_SUFFIX=""
+if [ "$AUTH" = "true" ]; then
+  AUTH_SUFFIX="-auth"
+fi
 
 # Upstream iperf tags do not have a 'v' prefix (e.g. 3.22, 3.16-beta1).
 VERSION="$IPERF_VERSION"
 
-echo "=== Building static iperf3 ${VERSION} for ${ARCH} ==="
+echo "=== Building static iperf3 ${VERSION} for ${ARCH}${AUTH_SUFFIX} ==="
 
 # Save the repository root so we can place the final archive there.
 REPO_ROOT="$(pwd)"
@@ -54,18 +63,22 @@ CROSS_BASE="${REPO_ROOT}/cross-toolchain"
 HOST=""
 CC=""
 QEMU_BIN=""
+TARGET=""
 case "$ARCH" in
   x86_64)
+    TARGET="x86_64-linux-musl"
     CC="musl-gcc"
     ;;
   aarch64)
-    HOST="aarch64-linux-musl"
-    CC="${CROSS_BASE}/${HOST}/bin/${HOST}-gcc"
+    TARGET="aarch64-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
     QEMU_BIN="qemu-aarch64-static"
     ;;
   armv7)
-    HOST="armv7l-linux-musleabihf"
-    CC="${CROSS_BASE}/${HOST}/bin/${HOST}-gcc"
+    TARGET="armv7l-linux-musleabihf"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
     QEMU_BIN="qemu-arm-static"
     ;;
   *)
@@ -90,7 +103,7 @@ if [ "$ARCH" != "x86_64" ]; then
 fi
 
 # Clean up any previous build
-BUILD_DIR="${REPO_ROOT}/iperf3-build-static-${ARCH}"
+BUILD_DIR="${REPO_ROOT}/iperf3-build-static-${ARCH}${AUTH_SUFFIX}"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
@@ -111,6 +124,17 @@ else
   cd "$BUILD_DIR"
 fi
 
+OPENSSL_DIR=""
+if [ "$AUTH" = "true" ]; then
+  echo "=== Downloading static OpenSSL for ${TARGET} ==="
+  OPENSSL_URL="https://github.com/userdocs/openssl/releases/latest/download/${TARGET}.tar.xz"
+  rm -f openssl-static.tar.xz
+  curl -fsSL --retry 5 --retry-delay 10 -o openssl-static.tar.xz "$OPENSSL_URL"
+  mkdir -p openssl-static
+  tar -xJf openssl-static.tar.xz -C openssl-static
+  OPENSSL_DIR="$(pwd)/openssl-static"
+fi
+
 cd "${SRC_DIR}"
 
 echo "=== Configuring static build ==="
@@ -119,10 +143,15 @@ echo "=== Configuring static build ==="
 # versions still build cleanly.
 CFLAGS="-static -Wno-error=incompatible-pointer-types"
 
+configure_flags=(--disable-shared --enable-static-bin)
+if [ -n "${OPENSSL_DIR:-}" ]; then
+  configure_flags+=(--with-openssl="$OPENSSL_DIR")
+fi
+
 if [ -n "$HOST" ]; then
-  ./configure CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="-static" --host="$HOST" --disable-shared --enable-static-bin
+  ./configure CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="-static" --host="$HOST" "${configure_flags[@]}"
 else
-  ./configure CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="-static" --disable-shared --enable-static-bin
+  ./configure CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="-static" "${configure_flags[@]}"
 fi
 
 echo "=== Building ==="
@@ -166,21 +195,27 @@ echo "OK: binary is statically linked"
 
 # Package the binary
 cd "$BUILD_DIR"
-OUTPUT_DIR="iperf3-${VERSION}-linux-${ARCH}-static"
+OUTPUT_DIR="iperf3-${VERSION}-linux-${ARCH}-static${AUTH_SUFFIX}"
 mkdir -p "$OUTPUT_DIR"
 cp "${SRC_DIR}/src/iperf3" "$OUTPUT_DIR/iperf3"
 
 # Copy license and add a small README
 cp "${SRC_DIR}/LICENSE" "$OUTPUT_DIR/LICENSE"
+
+if [ "$AUTH" = "true" ]; then
+  auth_note="These builds include statically-linked OpenSSL, so iperf3's RSA authentication feature is available."
+else
+  auth_note="These builds do not include OpenSSL, so iperf3's RSA authentication feature is not available."
+fi
+
 cat > "$OUTPUT_DIR/README.md" <<EOF
-# iperf3 ${VERSION} — static build for Linux ${ARCH}
+# iperf3 ${VERSION} — static build for Linux ${ARCH}${AUTH_SUFFIX}
 
 This is a statically-linked build of iperf3 compiled with musl libc.
 It should run on most Linux ${ARCH} distributions without installing
 additional libraries.
 
-Note: These builds do not include OpenSSL, so iperf3's RSA authentication
-feature is not available.
+${auth_note}
 
 ## Usage
 
@@ -189,7 +224,7 @@ feature is not available.
 \`\`\`
 EOF
 
-ARCHIVE="iperf3-${VERSION}-linux-${ARCH}-static.tar.gz"
+ARCHIVE="iperf3-${VERSION}-linux-${ARCH}-static${AUTH_SUFFIX}.tar.gz"
 tar -czf "$ARCHIVE" "$OUTPUT_DIR"
 cp "$ARCHIVE" "$REPO_ROOT/"
 

@@ -18,6 +18,10 @@ concurrency:
 jobs:
   build-static:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        auth: [false, true]
     steps:
       - name: Validate version input
         env:
@@ -39,6 +43,7 @@ jobs:
       - name: Build static (musl) binary
         env:
           IPERF_VERSION: ${{ inputs.version }}
+          AUTH: ${{ matrix.auth }}
         run: |
           set -euo pipefail
           ./scripts/build-static.sh
@@ -46,12 +51,16 @@ jobs:
       - name: Upload static artifact
         uses: actions/upload-artifact@v6
         with:
-          name: release-linux-x86_64-static
-          path: iperf3-*-linux-x86_64-static.tar.gz
+          name: release-linux-x86_64-static${{ matrix.auth && '-auth' || '' }}
+          path: iperf3-*-linux-x86_64-static${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
 
   build-dynamic:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        auth: [false, true]
     container:
       image: almalinux:8
     steps:
@@ -78,6 +87,7 @@ jobs:
       - name: Build dynamic (glibc) binary
         env:
           IPERF_VERSION: ${{ inputs.version }}
+          AUTH: ${{ matrix.auth }}
         run: |
           set -euo pipefail
           ./scripts/build-dynamic.sh
@@ -85,16 +95,17 @@ jobs:
       - name: Upload dynamic artifact
         uses: actions/upload-artifact@v6
         with:
-          name: release-linux-x86_64-dynamic
-          path: iperf3-build-dynamic/iperf3-*-linux-x86_64-dynamic.tar.gz
+          name: release-linux-x86_64-dynamic${{ matrix.auth && '-auth' || '' }}
+          path: iperf3-build-dynamic${{ matrix.auth && '-auth' || '' }}/iperf3-*-linux-x86_64-dynamic${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
 
   build-linux-static-cross:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         arch: [aarch64, armv7]
+        auth: [false, true]
     steps:
       - name: Validate version input
         env:
@@ -117,6 +128,7 @@ jobs:
         env:
           IPERF_VERSION: ${{ inputs.version }}
           ARCH: ${{ matrix.arch }}
+          AUTH: ${{ matrix.auth }}
         run: |
           set -euo pipefail
           ./scripts/build-static.sh
@@ -124,12 +136,16 @@ jobs:
       - name: Upload static artifact
         uses: actions/upload-artifact@v6
         with:
-          name: release-linux-${{ matrix.arch }}-static
-          path: iperf3-*-linux-${{ matrix.arch }}-static.tar.gz
+          name: release-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}
+          path: iperf3-*-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
 
   build-macos-x86_64:
     runs-on: macos-26-intel
+    strategy:
+      fail-fast: false
+      matrix:
+        auth: [false, true]
     steps:
       - name: Validate version input
         env:
@@ -152,17 +168,22 @@ jobs:
         env:
           IPERF_VERSION: ${{ inputs.version }}
           ARCH: x86_64
+          AUTH: ${{ matrix.auth }}
         run: ./scripts/build-macos-arch.sh
 
       - name: Upload x86_64 binary artifact
         uses: actions/upload-artifact@v6
         with:
-          name: build-macos-x86_64
-          path: macos-build-x86_64/*
+          name: build-macos-x86_64${{ matrix.auth && '-auth' || '' }}
+          path: macos-build-x86_64${{ matrix.auth && '-auth' || '' }}/*
           if-no-files-found: error
 
   build-macos-arm64:
     runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        auth: [false, true]
     steps:
       - name: Validate version input
         env:
@@ -185,18 +206,23 @@ jobs:
         env:
           IPERF_VERSION: ${{ inputs.version }}
           ARCH: arm64
+          AUTH: ${{ matrix.auth }}
         run: ./scripts/build-macos-arch.sh
 
       - name: Upload arm64 binary artifact
         uses: actions/upload-artifact@v6
         with:
-          name: build-macos-arm64
-          path: macos-build-arm64/*
+          name: build-macos-arm64${{ matrix.auth && '-auth' || '' }}
+          path: macos-build-arm64${{ matrix.auth && '-auth' || '' }}/*
           if-no-files-found: error
 
   package-macos-universal:
     needs: [build-macos-x86_64, build-macos-arm64]
     runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        auth: [false, true]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -204,25 +230,26 @@ jobs:
       - name: Download macOS x86_64 binary
         uses: actions/download-artifact@v7
         with:
-          name: build-macos-x86_64
-          path: macos-build-x86_64
+          name: build-macos-x86_64${{ matrix.auth && '-auth' || '' }}
+          path: macos-build-x86_64${{ matrix.auth && '-auth' || '' }}
 
       - name: Download macOS arm64 binary
         uses: actions/download-artifact@v7
         with:
-          name: build-macos-arm64
-          path: macos-build-arm64
+          name: build-macos-arm64${{ matrix.auth && '-auth' || '' }}
+          path: macos-build-arm64${{ matrix.auth && '-auth' || '' }}
 
       - name: Package universal2 binary
         env:
           IPERF_VERSION: ${{ inputs.version }}
+          AUTH: ${{ matrix.auth }}
         run: ./scripts/build-macos-universal.sh
 
       - name: Upload universal2 artifact
         uses: actions/upload-artifact@v6
         with:
-          name: release-macos-universal2
-          path: iperf3-*-macos-universal2.tar.gz
+          name: release-macos-universal2${{ matrix.auth && '-auth' || '' }}
+          path: iperf3-*-macos-universal2${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
 
   release:
@@ -310,3 +337,25 @@ jobs:
               ${latest_flag} \
               iperf3-*.tar.gz SHA256SUMS
           fi
+
+  retry-failed-jobs:
+    needs:
+      - build-static
+      - build-dynamic
+      - build-linux-static-cross
+      - build-macos-x86_64
+      - build-macos-arm64
+      - package-macos-universal
+      - release
+    runs-on: ubuntu-latest
+    if: failure() && github.run_attempt < 3
+    permissions:
+      actions: write
+    steps:
+      - name: Rerun failed jobs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Rerunning failed jobs for run ${{ github.run_id }} (attempt ${{ github.run_attempt }})"
+          gh run rerun ${{ github.run_id }} --failed --repo ${{ github.repository }}
