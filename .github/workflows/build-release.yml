@@ -20,9 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          VERSION="${{ inputs.version }}"
           if [ -z "$VERSION" ]; then
             echo "ERROR: version input is empty" >&2
             exit 1
@@ -33,7 +34,7 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build static (musl) binary
         env:
@@ -43,7 +44,7 @@ jobs:
           ./scripts/build-static.sh
 
       - name: Upload static artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: iperf3-static
           path: iperf3-build-static/iperf3-*-linux-x86_64-static.tar.gz
@@ -55,9 +56,10 @@ jobs:
       image: almalinux:8
     steps:
       - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          VERSION="${{ inputs.version }}"
           if [ -z "$VERSION" ]; then
             echo "ERROR: version input is empty" >&2
             exit 1
@@ -71,7 +73,7 @@ jobs:
         run: yum install -y git
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build dynamic (glibc) binary
         env:
@@ -81,7 +83,7 @@ jobs:
           ./scripts/build-dynamic.sh
 
       - name: Upload dynamic artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: iperf3-dynamic
           path: iperf3-build-dynamic/iperf3-*-linux-x86_64-dynamic.tar.gz
@@ -92,10 +94,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
           merge-multiple: false
