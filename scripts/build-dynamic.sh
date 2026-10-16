@@ -48,6 +48,19 @@ if curl -fsSL -o "$TARBALL" "$URL"; then
   tar -xzf "$TARBALL"
 else
   echo "=== Tarball not available; cloning from Git tag ${VERSION} ==="
+
+  # Upstream tags that lack release tarballs may require a newer autoconf than
+  # AlmaLinux 8 / CentOS Stream 8 ship. Build a recent autoconf from source.
+  AUTOCONF_VERSION=2.71
+  echo "=== Building autoconf ${AUTOCONF_VERSION} from source ==="
+  curl -fsSL "https://ftp.gnu.org/gnu/autoconf/autoconf-${AUTOCONF_VERSION}.tar.gz" | tar -xz
+  cd "autoconf-${AUTOCONF_VERSION}"
+  ./configure --prefix=/usr/local
+  make -j"$(nproc)"
+  make install
+  export PATH=/usr/local/bin:$PATH
+  cd "$BUILD_DIR"
+
   git clone --branch "${VERSION}" --depth 1 https://github.com/esnet/iperf.git "${SRC_DIR}"
   cd "${SRC_DIR}"
   echo "=== Bootstrapping autotools ==="
