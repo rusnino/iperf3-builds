@@ -1,0 +1,52 @@
+name: Release Watcher
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for new upstream iperf3 releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM: esnet/iperf
+          DOWNSTREAM: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          echo "Fetching last 10 upstream releases from ${UPSTREAM}..."
+          upstream_releases=$(gh api "repos/${UPSTREAM}/releases?per_page=10" --jq '.[].tag_name')
+
+          echo "Fetching existing downstream releases from ${DOWNSTREAM}..."
+          downstream_releases=$(gh release list --repo "${DOWNSTREAM}" --limit 100 --json tagName --jq '.[].tagName' || true)
+
+          echo "Upstream releases:"
+          echo "${upstream_releases}"
+          echo ""
+          echo "Downstream releases:"
+          echo "${downstream_releases:-(none)}"
+          echo ""
+
+          missing_count=0
+          for tag in ${upstream_releases}; do
+            if echo "${downstream_releases}" | grep -qx "${tag}"; then
+              echo "  ✓ ${tag} already exists downstream"
+            else
+              echo "  → ${tag} missing; triggering build-release workflow"
+              gh workflow run build-release.yml --repo "${DOWNSTREAM}" -f version="${tag}"
+              missing_count=$((missing_count + 1))
+            fi
+          done
+
+          if [ "${missing_count}" -eq 0 ]; then
+            echo "No missing releases. Everything is up to date."
+          else
+            echo "Triggered ${missing_count} build-release workflow run(s)."
+          fi
