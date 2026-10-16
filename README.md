@@ -1,5 +1,8 @@
 # iperf3-builds
 
+[![Latest Release](https://img.shields.io/github/v/release/rusnino/iperf3-builds?sort=semver)](https://github.com/rusnino/iperf3-builds/releases/latest)
+[![Build and Release](https://img.shields.io/github/actions/workflow/status/rusnino/iperf3-builds/build-release.yml?logo=github)](https://github.com/rusnino/iperf3-builds/actions/workflows/build-release.yml)
+
 Automated builds of [esnet/iperf](https://github.com/esnet/iperf) for Linux x86_64.
 
 This repository watches the upstream iperf3 project for new releases and
