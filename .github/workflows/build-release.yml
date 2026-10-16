@@ -46,8 +46,8 @@ jobs:
       - name: Upload static artifact
         uses: actions/upload-artifact@v6
         with:
-          name: iperf3-static
-          path: iperf3-build-static/iperf3-*-linux-x86_64-static.tar.gz
+          name: release-linux-x86_64-static
+          path: iperf3-*-linux-x86_64-static.tar.gz
           if-no-files-found: error
 
   build-dynamic:
@@ -85,12 +85,148 @@ jobs:
       - name: Upload dynamic artifact
         uses: actions/upload-artifact@v6
         with:
-          name: iperf3-dynamic
+          name: release-linux-x86_64-dynamic
           path: iperf3-build-dynamic/iperf3-*-linux-x86_64-dynamic.tar.gz
           if-no-files-found: error
 
+  build-linux-static-cross:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [aarch64, armv7]
+    steps:
+      - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: version input is empty" >&2
+            exit 1
+          fi
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+            echo "ERROR: invalid version input: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Build static (${{ matrix.arch }}) binary
+        env:
+          IPERF_VERSION: ${{ inputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          ./scripts/build-static.sh
+
+      - name: Upload static artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-linux-${{ matrix.arch }}-static
+          path: iperf3-*-linux-${{ matrix.arch }}-static.tar.gz
+          if-no-files-found: error
+
+  build-macos-x86_64:
+    runs-on: macos-26-intel
+    steps:
+      - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: version input is empty" >&2
+            exit 1
+          fi
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+            echo "ERROR: invalid version input: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Build macOS x86_64 binary
+        env:
+          IPERF_VERSION: ${{ inputs.version }}
+          ARCH: x86_64
+        run: ./scripts/build-macos-arch.sh
+
+      - name: Upload x86_64 binary artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-macos-x86_64
+          path: macos-build-x86_64/**
+          if-no-files-found: error
+
+  build-macos-arm64:
+    runs-on: macos-26
+    steps:
+      - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: version input is empty" >&2
+            exit 1
+          fi
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+            echo "ERROR: invalid version input: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Build macOS arm64 binary
+        env:
+          IPERF_VERSION: ${{ inputs.version }}
+          ARCH: arm64
+        run: ./scripts/build-macos-arch.sh
+
+      - name: Upload arm64 binary artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-macos-arm64
+          path: macos-build-arm64/**
+          if-no-files-found: error
+
+  package-macos-universal:
+    needs: [build-macos-x86_64, build-macos-arm64]
+    runs-on: macos-26
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Download macOS single-arch binaries
+        uses: actions/download-artifact@v7
+        with:
+          pattern: build-macos-*
+          merge-multiple: true
+
+      - name: Package universal2 binary
+        env:
+          IPERF_VERSION: ${{ inputs.version }}
+        run: ./scripts/build-macos-universal.sh
+
+      - name: Upload universal2 artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-macos-universal2
+          path: iperf3-*-macos-universal2.tar.gz
+          if-no-files-found: error
+
   release:
-    needs: [build-static, build-dynamic]
+    needs:
+      - build-static
+      - build-dynamic
+      - build-linux-static-cross
+      - build-macos-x86_64
+      - build-macos-arm64
+      - package-macos-universal
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -100,7 +236,8 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: artifacts
-          merge-multiple: false
+          pattern: release-*
+          merge-multiple: true
 
       - name: Create release
         env:
@@ -109,21 +246,6 @@ jobs:
           UPSTREAM: esnet/iperf
         run: |
           set -euo pipefail
-
-          # Collect built archives into the working directory.
-          find artifacts -type f -name 'iperf3-*.tar.gz' -exec cp {} . \;
-
-          if [ ! -f iperf3-*-static.tar.gz ]; then
-            echo "ERROR: static archive not found" >&2
-            exit 1
-          fi
-          if [ ! -f iperf3-*-dynamic.tar.gz ]; then
-            echo "ERROR: dynamic archive not found" >&2
-            exit 1
-          fi
-
-          # Generate checksums.
-          sha256sum iperf3-*.tar.gz > SHA256SUMS
 
           # Fetch upstream release metadata.
           release_json=$(gh api "repos/${UPSTREAM}/releases/tags/${VERSION}")
@@ -138,7 +260,7 @@ jobs:
             prerelease_flag="--prerelease"
           fi
 
-          # Mark as "latest" only when this is the current upstream stable release.
+          # Mark as "Latest" only when this is the current upstream stable release.
           # Otherwise explicitly mark as not-latest so backfilled older releases
           # do not steal the Latest badge.
           latest_flag="--latest=false"
@@ -149,10 +271,19 @@ jobs:
             fi
           fi
 
+          cd artifacts
+          if ! ls iperf3-*.tar.gz >/dev/null 2>&1; then
+            echo "ERROR: no release archives found" >&2
+            exit 1
+          fi
+
+          # Generate checksums.
+          sha256sum iperf3-*.tar.gz > SHA256SUMS
+
           echo "Creating release ${VERSION} (prerelease=${is_prerelease}, latest=${latest_flag:-no})..."
           gh release create "${VERSION}" \
             --title "iperf3 ${VERSION} builds" \
-            --notes-file release-notes.md \
+            --notes-file ../release-notes.md \
             ${prerelease_flag} \
             ${latest_flag} \
             iperf3-*.tar.gz SHA256SUMS
