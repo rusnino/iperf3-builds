@@ -3,7 +3,8 @@
 [![Latest Release](https://img.shields.io/github/v/release/rusnino/iperf3-builds?sort=semver)](https://github.com/rusnino/iperf3-builds/releases/latest)
 [![Build and Release](https://img.shields.io/github/actions/workflow/status/rusnino/iperf3-builds/build-release.yml?logo=github)](https://github.com/rusnino/iperf3-builds/actions/workflows/build-release.yml)
 
-Automated builds of [esnet/iperf](https://github.com/esnet/iperf) for Linux x86_64.
+Automated builds of [esnet/iperf](https://github.com/esnet/iperf) for Linux
+(x86_64, ARM64, ARM32) and macOS (Intel + Apple Silicon universal2).
 
 This repository watches the upstream iperf3 project for new releases and
 automatically compiles ready-to-use binaries. You do not need to install
@@ -15,20 +16,35 @@ build tools on your target system — just download a release archive and run
 Pre-built binaries are published on the
 [GitHub Releases](https://github.com/rusnino/iperf3-builds/releases) page.
 
-Each upstream release produces two assets:
+Each upstream release produces the following assets:
 
 - **`iperf3-<version>-linux-x86_64-static.tar.gz`** — statically linked with
-  [musl](https://musl.libc.org/). Use this if you want a single executable that
-  runs on almost any Linux x86_64 system without extra libraries.
+  [musl](https://musl.libc.org/). Runs on almost any Linux x86_64 system
+  without extra libraries.
 - **`iperf3-<version>-linux-x86_64-dynamic.tar.gz`** — dynamically linked with
   glibc, built on an AlmaLinux 8 / CentOS Stream 8 compatible environment. Use
   this if you prefer a glibc build and your target has glibc 2.28 or newer.
+- **`iperf3-<version>-linux-aarch64-static.tar.gz`** — statically linked with
+  musl for Linux ARM64 (e.g. Raspberry Pi 4/5 with 64-bit OS, AWS Graviton,
+  Apple Silicon Linux VMs).
+- **`iperf3-<version>-linux-armv7-static.tar.gz`** — statically linked with
+  musl for 32-bit ARM Linux boards (e.g. older Raspberry Pi, embedded ARM
+  devices).
+- **`iperf3-<version>-macos-universal2.tar.gz`** — universal2 binary that runs
+  natively on both Intel and Apple Silicon Macs. Requires macOS 11.0 (Big Sur)
+  or newer.
 
 A `SHA256SUMS` file is included with every release so you can verify the
 archives.
 
 > **Note:** These builds do not include OpenSSL, so iperf3's RSA
 > authentication feature is not available.
+
+> **macOS quarantine:** If you download the macOS archive through a web
+> browser, macOS may mark `iperf3` with a quarantine flag and show a
+> “developer cannot be verified” warning when you first run it from Terminal.
+> Remove the flag with `xattr -d com.apple.quarantine iperf3`, or allow it in
+> System Settings → Privacy & Security.
 
 ## Quick start
 
@@ -41,10 +57,13 @@ tar -xzf iperf3-${VERSION}-linux-x86_64-static.tar.gz
 
 ## Build variants
 
-| Variant | libc | Best for | Notes |
-|---|---|---|---|
-| static | musl | Maximum portability | No runtime dependencies |
-| dynamic | glibc 2.28 | CentOS Stream 8 / RHEL 8 / AlmaLinux 8 targets | Smaller, but needs compatible glibc |
+| Platform | Variant | libc / format | Best for | Notes |
+|---|---|---|---|---|
+| Linux x86_64 | static | musl | Maximum portability | No runtime dependencies |
+| Linux x86_64 | dynamic | glibc 2.28 | CentOS Stream 8 / RHEL 8 / AlmaLinux 8 targets | Smaller, but needs compatible glibc |
+| Linux aarch64 | static | musl | ARM64 servers and SBCs | Cross-compiled, smoke-tested with QEMU |
+| Linux armv7 | static | musl | 32-bit ARM boards | Cross-compiled, smoke-tested with QEMU |
+| macOS | universal2 | system libs | Intel and Apple Silicon Macs | Requires macOS 11.0+; ad-hoc signed, not notarized |
 
 ## Automation
 
