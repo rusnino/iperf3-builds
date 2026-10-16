@@ -24,6 +24,9 @@ Each upstream release produces two assets:
 A `SHA256SUMS` file is included with every release so you can verify the
 archives.
 
+> **Note:** These builds do not include OpenSSL, so iperf3's RSA
+> authentication feature is not available.
+
 ## Quick start
 
 ```bash

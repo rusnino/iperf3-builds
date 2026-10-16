@@ -1,12 +1,6 @@
 name: Build and Release
 
 on:
-  workflow_call:
-    inputs:
-      version:
-        description: 'Upstream iperf3 version/tag to build (e.g. 3.22)'
-        required: true
-        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -17,10 +11,27 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
 jobs:
   build-static:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate version input
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: version input is empty" >&2
+            exit 1
+          fi
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+            echo "ERROR: invalid version input: $VERSION" >&2
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -43,6 +54,19 @@ jobs:
     container:
       image: almalinux:8
     steps:
+      - name: Validate version input
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: version input is empty" >&2
+            exit 1
+          fi
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+            echo "ERROR: invalid version input: $VERSION" >&2
+            exit 1
+          fi
+
       - name: Install git
         run: yum install -y git
 
@@ -112,9 +136,19 @@ jobs:
             prerelease_flag="--prerelease"
           fi
 
-          echo "Creating release ${VERSION} (prerelease=${is_prerelease})..."
+          # Only mark as "latest" when this is the current upstream stable release.
+          latest_flag=""
+          if [ "$is_prerelease" != "true" ]; then
+            latest_upstream=$(gh api "repos/${UPSTREAM}/releases/latest" --jq '.tag_name')
+            if [ "$VERSION" = "$latest_upstream" ]; then
+              latest_flag="--latest"
+            fi
+          fi
+
+          echo "Creating release ${VERSION} (prerelease=${is_prerelease}, latest=${latest_flag:-no})..."
           gh release create "${VERSION}" \
             --title "iperf3 ${VERSION} builds" \
             --notes-file release-notes.md \
             ${prerelease_flag} \
+            ${latest_flag} \
             iperf3-*.tar.gz SHA256SUMS

@@ -9,6 +9,10 @@ permissions:
   actions: write
   contents: read
 
+concurrency:
+  group: watcher
+  cancel-in-progress: false
+
 jobs:
   watch:
     runs-on: ubuntu-latest
@@ -25,7 +29,7 @@ jobs:
           upstream_releases=$(gh api "repos/${UPSTREAM}/releases?per_page=10" --jq '.[].tag_name')
 
           echo "Fetching existing downstream releases from ${DOWNSTREAM}..."
-          downstream_releases=$(gh release list --repo "${DOWNSTREAM}" --limit 100 --json tagName --jq '.[].tagName' || true)
+          downstream_releases=$(gh release list --repo "${DOWNSTREAM}" --limit 100 --json tagName --jq '.[].tagName')
 
           echo "Upstream releases:"
           echo "${upstream_releases}"

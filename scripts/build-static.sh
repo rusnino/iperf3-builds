@@ -25,10 +25,10 @@ fi
 if command -v apt-get >/dev/null 2>&1; then
   echo "=== Installing dependencies via apt-get ==="
   DEBIAN_FRONTEND=noninteractive $SUDO apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq build-essential musl-tools curl
+  DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq build-essential musl-tools curl git autoconf automake libtool
 elif command -v apk >/dev/null 2>&1; then
   echo "=== Installing dependencies via apk ==="
-  apk add --no-cache build-base musl curl
+  apk add --no-cache build-base musl curl git autoconf automake libtool
 else
   echo "ERROR: No supported package manager found" >&2
   exit 1
@@ -42,13 +42,21 @@ cd "$BUILD_DIR"
 
 TARBALL="iperf-${VERSION}.tar.gz"
 URL="https://github.com/esnet/iperf/releases/download/${VERSION}/${TARBALL}"
+SRC_DIR="iperf-${VERSION}"
 
-echo "=== Downloading ${URL} ==="
-curl -fsSL -o "$TARBALL" "$URL"
+if curl -fsSL -o "$TARBALL" "$URL"; then
+  echo "=== Extracting ${TARBALL} ==="
+  tar -xzf "$TARBALL"
+else
+  echo "=== Tarball not available; cloning from Git tag ${VERSION} ==="
+  git clone --branch "${VERSION}" --depth 1 https://github.com/esnet/iperf.git "${SRC_DIR}"
+  cd "${SRC_DIR}"
+  echo "=== Bootstrapping autotools ==="
+  autoreconf -fi
+  cd "$BUILD_DIR"
+fi
 
-echo "=== Extracting ${TARBALL} ==="
-tar -xzf "$TARBALL"
-cd "iperf-${VERSION}"
+cd "${SRC_DIR}"
 
 echo "=== Configuring static build ==="
 ./configure CC=musl-gcc CFLAGS="-static" LDFLAGS="-static" --disable-shared --enable-static-bin
@@ -70,16 +78,19 @@ fi
 cd "$BUILD_DIR"
 OUTPUT_DIR="iperf3-${VERSION}-linux-x86_64-static"
 mkdir -p "$OUTPUT_DIR"
-cp "iperf-${VERSION}/src/iperf3" "$OUTPUT_DIR/iperf3"
+cp "${SRC_DIR}/src/iperf3" "$OUTPUT_DIR/iperf3"
 
 # Copy license and add a small README
-cp "iperf-${VERSION}/LICENSE" "$OUTPUT_DIR/LICENSE"
+cp "${SRC_DIR}/LICENSE" "$OUTPUT_DIR/LICENSE"
 cat > "$OUTPUT_DIR/README.md" <<EOF
 # iperf3 ${VERSION} — static build for Linux x86_64
 
 This is a statically-linked build of iperf3 compiled with musl libc.
 It should run on most Linux x86_64 distributions without installing
 additional libraries.
+
+Note: These builds do not include OpenSSL, so iperf3's RSA authentication
+feature is not available.
 
 ## Usage
 
@@ -90,6 +101,9 @@ EOF
 
 ARCHIVE="iperf3-${VERSION}-linux-x86_64-static.tar.gz"
 tar -czf "$ARCHIVE" "$OUTPUT_DIR"
+
+echo "=== Smoke test ==="
+"${OUTPUT_DIR}/iperf3" --version
 
 echo "=== Built: $(pwd)/${ARCHIVE} ==="
 ls -lh "$ARCHIVE"

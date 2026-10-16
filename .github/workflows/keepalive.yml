@@ -1,0 +1,21 @@
+name: Keepalive
+
+# GitHub disables scheduled workflows after 60 days of repository inactivity.
+# This workflow prevents the Release Watcher schedule from being suspended.
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep release-watcher workflow alive
+        uses: gautamkrishnar/keepalive-workflow@v2
+        with:
+          workflow_files: "release-watcher.yml"
