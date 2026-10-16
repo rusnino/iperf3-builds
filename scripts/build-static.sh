@@ -19,10 +19,10 @@ echo "=== Building static iperf3 ${VERSION} ==="
 if command -v apt-get >/dev/null 2>&1; then
   echo "=== Installing dependencies via apt-get ==="
   apt-get update -qq
-  apt-get install -y -qq build-essential git musl-tools autoconf automake libtool
+  apt-get install -y -qq build-essential musl-tools curl
 elif command -v apk >/dev/null 2>&1; then
   echo "=== Installing dependencies via apk ==="
-  apk add --no-cache build-base git autoconf automake libtool
+  apk add --no-cache build-base musl curl
 else
   echo "ERROR: No supported package manager found" >&2
   exit 1
@@ -34,13 +34,15 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
-echo "=== Cloning iperf3 ${VERSION} ==="
-git clone --branch "${VERSION}" --depth 1 https://github.com/esnet/iperf.git
+TARBALL="iperf-${VERSION}.tar.gz"
+URL="https://github.com/esnet/iperf/releases/download/${VERSION}/${TARBALL}"
 
-cd iperf
+echo "=== Downloading ${URL} ==="
+curl -fsSL -o "$TARBALL" "$URL"
 
-echo "=== Bootstrapping build system ==="
-autoreconf -fi
+echo "=== Extracting ${TARBALL} ==="
+tar -xzf "$TARBALL"
+cd "iperf-${VERSION}"
 
 echo "=== Configuring static build ==="
 ./configure CC=musl-gcc CFLAGS="-static" LDFLAGS="-static" --disable-shared --enable-static-bin
@@ -62,10 +64,10 @@ fi
 cd "$BUILD_DIR"
 OUTPUT_DIR="iperf3-${VERSION}-linux-x86_64-static"
 mkdir -p "$OUTPUT_DIR"
-cp iperf/src/iperf3 "$OUTPUT_DIR/iperf3"
+cp "iperf-${VERSION}/src/iperf3" "$OUTPUT_DIR/iperf3"
 
 # Copy license and add a small README
-cp iperf/LICENSE "$OUTPUT_DIR/LICENSE"
+cp "iperf-${VERSION}/LICENSE" "$OUTPUT_DIR/LICENSE"
 cat > "$OUTPUT_DIR/README.md" <<EOF
 # iperf3 ${VERSION} — static build for Linux x86_64
 
@@ -82,11 +84,6 @@ EOF
 
 ARCHIVE="iperf3-${VERSION}-linux-x86_64-static.tar.gz"
 tar -czf "$ARCHIVE" "$OUTPUT_DIR"
-
-# Move the archive to the original working directory
-mv "$ARCHIVE" "$(pwd)/.."
-
-cd "$(pwd)/.."
 
 echo "=== Built: $(pwd)/${ARCHIVE} ==="
 ls -lh "$ARCHIVE"
