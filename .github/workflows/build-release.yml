@@ -1,0 +1,117 @@
+name: Build and Release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Upstream iperf3 version/tag to build (e.g. 3.22)'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Upstream iperf3 version/tag to build (e.g. 3.22)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-static:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build static (musl) binary
+        env:
+          IPERF_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          ./scripts/build-static.sh
+
+      - name: Upload static artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iperf3-static
+          path: iperf3-build-static/iperf3-*-linux-x86_64-static.tar.gz
+          if-no-files-found: error
+
+  build-dynamic:
+    runs-on: ubuntu-latest
+    container:
+      image: almalinux:8
+    steps:
+      - name: Install git
+        run: yum install -y git
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build dynamic (glibc) binary
+        env:
+          IPERF_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          ./scripts/build-dynamic.sh
+
+      - name: Upload dynamic artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iperf3-dynamic
+          path: iperf3-build-dynamic/iperf3-*-linux-x86_64-dynamic.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [build-static, build-dynamic]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          UPSTREAM: esnet/iperf
+        run: |
+          set -euo pipefail
+
+          # Collect built archives into the working directory.
+          find artifacts -type f -name 'iperf3-*.tar.gz' -exec cp {} . \;
+
+          if [ ! -f iperf3-*-static.tar.gz ]; then
+            echo "ERROR: static archive not found" >&2
+            exit 1
+          fi
+          if [ ! -f iperf3-*-dynamic.tar.gz ]; then
+            echo "ERROR: dynamic archive not found" >&2
+            exit 1
+          fi
+
+          # Generate checksums.
+          sha256sum iperf3-*.tar.gz > SHA256SUMS
+
+          # Fetch upstream release metadata.
+          release_json=$(gh api "repos/${UPSTREAM}/releases/tags/${VERSION}")
+          release_body=$(echo "$release_json" | jq -r '.body // ""')
+          is_prerelease=$(echo "$release_json" | jq -r '.prerelease // false')
+
+          # Write release notes to a file to avoid shell quoting issues.
+          printf '%s' "$release_body" > release-notes.md
+
+          prerelease_flag=""
+          if [ "$is_prerelease" = "true" ]; then
+            prerelease_flag="--prerelease"
+          fi
+
+          echo "Creating release ${VERSION} (prerelease=${is_prerelease})..."
+          gh release create "${VERSION}" \
+            --title "iperf3 ${VERSION} builds" \
+            --notes-file release-notes.md \
+            ${prerelease_flag} \
+            iperf3-*.tar.gz SHA256SUMS
