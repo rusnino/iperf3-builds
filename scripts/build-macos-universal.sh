@@ -32,8 +32,12 @@ if [ ! -f macos-build-x86_64/LICENSE ] && [ ! -f macos-build-arm64/LICENSE ]; th
   exit 1
 fi
 
+# Ensure downloaded binaries are executable before lipo merges them.
+chmod +x macos-build-x86_64/iperf3 macos-build-arm64/iperf3
+
 lipo -create macos-build-x86_64/iperf3 macos-build-arm64/iperf3 -output iperf3
 codesign -s - iperf3
+chmod +x iperf3
 
 OUTPUT_DIR="iperf3-${VERSION}-macos-universal2"
 rm -rf "$OUTPUT_DIR"
