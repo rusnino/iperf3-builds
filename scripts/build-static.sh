@@ -15,11 +15,17 @@ VERSION="$IPERF_VERSION"
 
 echo "=== Building static iperf3 ${VERSION} ==="
 
-# Install build dependencies
+# Install build dependencies. Use sudo when not running as root (typical in
+# GitHub Actions runners).
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+  SUDO="sudo"
+fi
+
 if command -v apt-get >/dev/null 2>&1; then
   echo "=== Installing dependencies via apt-get ==="
-  apt-get update -qq
-  apt-get install -y -qq build-essential musl-tools curl
+  DEBIAN_FRONTEND=noninteractive $SUDO apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq build-essential musl-tools curl
 elif command -v apk >/dev/null 2>&1; then
   echo "=== Installing dependencies via apk ==="
   apk add --no-cache build-base musl curl
