@@ -114,10 +114,15 @@ fi
 cd "${SRC_DIR}"
 
 echo "=== Configuring static build ==="
+# GCC 14+/16 treats some older iperf3 callback signatures as incompatible
+# pointer types. Demote that specific diagnostic to a warning so legacy
+# versions still build cleanly.
+CFLAGS="-static -Wno-error=incompatible-pointer-types"
+
 if [ -n "$HOST" ]; then
-  ./configure CC="$CC" CFLAGS="-static" LDFLAGS="-static" --host="$HOST" --disable-shared --enable-static-bin
+  ./configure CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="-static" --host="$HOST" --disable-shared --enable-static-bin
 else
-  ./configure CC="$CC" CFLAGS="-static" LDFLAGS="-static" --disable-shared --enable-static-bin
+  ./configure CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="-static" --disable-shared --enable-static-bin
 fi
 
 echo "=== Building ==="
