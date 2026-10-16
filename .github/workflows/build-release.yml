@@ -266,14 +266,13 @@ jobs:
             prerelease_flag="--prerelease"
           fi
 
-          # Mark as "Latest" only when this is the current upstream stable release.
-          # Otherwise explicitly mark as not-latest so backfilled older releases
-          # do not steal the Latest badge.
-          latest_flag="--latest=false"
+          # Determine whether this is the current upstream stable release.
+          latest_upstream=""
+          is_latest=false
           if [ "$is_prerelease" != "true" ]; then
             latest_upstream=$(gh api "repos/${UPSTREAM}/releases/latest" --jq '.tag_name')
             if [ "$VERSION" = "$latest_upstream" ]; then
-              latest_flag="--latest=true"
+              is_latest=true
             fi
           fi
 
@@ -286,10 +285,28 @@ jobs:
           # Generate checksums.
           sha256sum iperf3-*.tar.gz > SHA256SUMS
 
-          echo "Creating release ${VERSION} (prerelease=${is_prerelease}, latest=${latest_flag:-no})..."
-          gh release create "${VERSION}" \
-            --title "iperf3 ${VERSION} builds" \
-            --notes-file ../release-notes.md \
-            ${prerelease_flag} \
-            ${latest_flag} \
-            iperf3-*.tar.gz SHA256SUMS
+          release_exists=false
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            release_exists=true
+          fi
+
+          if [ "$release_exists" = "true" ]; then
+            echo "Release ${VERSION} already exists; uploading/overwriting assets."
+            gh release upload "${VERSION}" iperf3-*.tar.gz SHA256SUMS --clobber
+            gh release edit "${VERSION}" --notes-file ../release-notes.md ${prerelease_flag}
+            if [ "$is_latest" = "true" ]; then
+              gh release edit "${VERSION}" --latest
+            fi
+          else
+            latest_flag="--latest=false"
+            if [ "$is_latest" = "true" ]; then
+              latest_flag="--latest=true"
+            fi
+            echo "Creating release ${VERSION} (prerelease=${is_prerelease}, latest=${latest_flag:-no})..."
+            gh release create "${VERSION}" \
+              --title "iperf3 ${VERSION} builds" \
+              --notes-file ../release-notes.md \
+              ${prerelease_flag} \
+              ${latest_flag} \
+              iperf3-*.tar.gz SHA256SUMS
+          fi
