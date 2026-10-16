@@ -33,22 +33,25 @@ echo "=== Building dynamic iperf3 ${VERSION}${AUTH_SUFFIX} ==="
 if command -v apt-get >/dev/null 2>&1; then
   echo "=== Installing dependencies via apt-get ==="
   apt-get update -qq
-  apt-get install -y -qq build-essential curl git autoconf automake libtool
+  packages="build-essential curl git autoconf automake libtool perl"
   if [ "$AUTH" = "true" ]; then
-    apt-get install -y -qq libssl-dev zlib1g-dev libzstd-dev
+    packages="$packages zlib1g-dev libzstd-dev"
   fi
+  apt-get install -y -qq $packages
 elif command -v yum >/dev/null 2>&1; then
   echo "=== Installing dependencies via yum ==="
-  yum install -y gcc make curl git autoconf automake libtool
+  packages="gcc make curl git autoconf automake libtool perl perl-IPC-Cmd"
   if [ "$AUTH" = "true" ]; then
-    yum install -y openssl-devel openssl-static zlib-static zstd-static
+    packages="$packages zlib-devel libzstd-devel"
   fi
+  yum install -y $packages
 elif command -v apk >/dev/null 2>&1; then
   echo "=== Installing dependencies via apk ==="
-  apk add --no-cache build-base curl git autoconf automake libtool
+  packages="build-base curl git autoconf automake libtool perl"
   if [ "$AUTH" = "true" ]; then
-    apk add --no-cache openssl-dev openssl-libs-static zlib-static zstd-static
+    packages="$packages zlib-dev zstd-dev"
   fi
+  apk add --no-cache $packages
 else
   echo "ERROR: No supported package manager found" >&2
   exit 1
@@ -62,38 +65,24 @@ cd "$BUILD_DIR"
 
 OPENSSL_DIR=""
 if [ "$AUTH" = "true" ]; then
-  echo "=== Preparing static OpenSSL libraries ==="
-  mkdir -p openssl-static-local/include openssl-static-local/lib
-
-  # Copy headers
-  if [ -d /usr/include/openssl ]; then
-    cp -r /usr/include/openssl openssl-static-local/include/
-  elif [ -d /usr/local/include/openssl ]; then
-    cp -r /usr/local/include/openssl openssl-static-local/include/
-  else
-    echo "ERROR: OpenSSL headers not found" >&2
-    exit 1
+  echo "=== Building static OpenSSL from source ==="
+  OPENSSL_VERSION="${OPENSSL_VERSION:-3.3.2}"
+  curl -fsSL --retry 5 --retry-delay 10 \
+    "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" | tar -xz
+  cd "openssl-${OPENSSL_VERSION}"
+  ./config --prefix="$(pwd)/../openssl-static-local" \
+    no-shared no-zlib no-zstd -fPIC
+  make -j"$(nproc)"
+  make install_sw
+  cd ..
+  # OpenSSL installs 64-bit static libraries to lib64 by default, but the
+  # iperf3 configure macro looks in $OPENSSL_DIR/lib.
+  if [ -d "openssl-static-local/lib64" ]; then
+    mkdir -p openssl-static-local/lib
+    mv openssl-static-local/lib64/*.a openssl-static-local/lib/ 2>/dev/null || true
+    mv openssl-static-local/lib64/pkgconfig openssl-static-local/lib/ 2>/dev/null || true
+    rmdir openssl-static-local/lib64 2>/dev/null || true
   fi
-
-  # Find and copy static libraries
-  for lib in libcrypto.a libssl.a; do
-    found=$(find /usr/lib /usr/lib64 /lib /usr/local/lib -name "$lib" 2>/dev/null | head -1)
-    if [ -z "${found:-}" ]; then
-      echo "ERROR: static OpenSSL library ${lib} not found" >&2
-      exit 1
-    fi
-    cp "$found" openssl-static-local/lib/
-  done
-
-  # Also copy static dependency libraries so the final binary does not need
-  # zlib/libzstd at runtime.
-  for lib in libz.a libzstd.a; do
-    found=$(find /usr/lib /usr/lib64 /lib /usr/local/lib -name "$lib" 2>/dev/null | head -1)
-    if [ -n "${found:-}" ]; then
-      cp "$found" openssl-static-local/lib/
-    fi
-  done
-
   OPENSSL_DIR="$(pwd)/openssl-static-local"
 fi
 
@@ -138,7 +127,7 @@ if [ -n "${OPENSSL_DIR:-}" ]; then
   export PKG_CONFIG_PATH=""
   export CPPFLAGS="${CPPFLAGS:-} -I${OPENSSL_DIR}/include"
   export LDFLAGS="${LDFLAGS:-} -L${OPENSSL_DIR}/lib"
-  export LIBS="${LIBS:-} -ldl -lpthread -lz -lzstd"
+  export LIBS="${LIBS:-} -ldl -lpthread"
 fi
 
 ./configure "${configure_flags[@]}"
@@ -150,7 +139,7 @@ make -j"$(nproc)"
 cd "$BUILD_DIR"
 OUTPUT_DIR="iperf3-${VERSION}-linux-x86_64-dynamic${AUTH_SUFFIX}"
 mkdir -p "$OUTPUT_DIR"
-# With --disable-shared --enable-static-bin the real binary is produced at src/iperf3.
+# With --disable-shared the real binary is produced at src/iperf3.
 cp "${SRC_DIR}/src/iperf3" "$OUTPUT_DIR/iperf3"
 
 # Copy license and add a small README
