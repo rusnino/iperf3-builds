@@ -32,7 +32,7 @@ fi
 
 if command -v apt-get >/dev/null 2>&1; then
   echo "=== Installing dependencies via apt-get ==="
-  packages="build-essential musl-tools curl git autoconf automake libtool"
+  packages="build-essential musl-tools curl git autoconf automake libtool file xz-utils"
   if [ "$ARCH" != "x86_64" ]; then
     packages="$packages qemu-user-static"
   fi
@@ -50,7 +50,7 @@ else
 fi
 
 # Select toolchain and configure host for cross builds.
-CROSS_ROOT="${CROSS_ROOT:-${REPO_ROOT}/cross-toolchain}"
+CROSS_BASE="${REPO_ROOT}/cross-toolchain"
 HOST=""
 CC=""
 QEMU_BIN=""
@@ -60,12 +60,12 @@ case "$ARCH" in
     ;;
   aarch64)
     HOST="aarch64-linux-musl"
-    CC="${CROSS_ROOT}/bin/aarch64-linux-musl-gcc"
+    CC="${CROSS_BASE}/${HOST}/bin/${HOST}-gcc"
     QEMU_BIN="qemu-aarch64-static"
     ;;
   armv7)
-    HOST="arm-linux-musleabihf"
-    CC="${CROSS_ROOT}/bin/arm-linux-musleabihf-gcc"
+    HOST="armv7l-linux-musleabihf"
+    CC="${CROSS_BASE}/${HOST}/bin/${HOST}-gcc"
     QEMU_BIN="qemu-arm-static"
     ;;
   *)
@@ -76,17 +76,13 @@ esac
 
 if [ "$ARCH" != "x86_64" ]; then
   echo "=== Downloading musl cross toolchain for ${ARCH} ==="
-  rm -rf "$CROSS_ROOT"
-  mkdir -p "$CROSS_ROOT"
-  case "$ARCH" in
-    aarch64)
-      toolchain_url="https://musl.cc/aarch64-linux-musl-cross.tgz"
-      ;;
-    armv7)
-      toolchain_url="https://musl.cc/arm-linux-musleabihf-cross.tgz"
-      ;;
-  esac
-  curl -fsSL --retry 5 --retry-delay 10 "$toolchain_url" | tar -xz -C "$CROSS_ROOT" --strip-components=1
+  MUSL_CROSS_VERSION="${MUSL_CROSS_VERSION:-2642}"
+  toolchain_filename="x86_64-${HOST}.tar.xz"
+  toolchain_url="https://github.com/userdocs/qbt-musl-cross-make/releases/download/${MUSL_CROSS_VERSION}/${toolchain_filename}"
+  rm -rf "$CROSS_BASE"
+  mkdir -p "$CROSS_BASE"
+  curl -fsSL --retry 5 --retry-delay 10 -o "/tmp/${toolchain_filename}" "$toolchain_url"
+  tar -xJf "/tmp/${toolchain_filename}" -C "$CROSS_BASE"
   if [ ! -x "$CC" ]; then
     echo "ERROR: cross compiler not found at ${CC}" >&2
     exit 1
