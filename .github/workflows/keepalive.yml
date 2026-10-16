@@ -1,0 +1,47 @@
+name: Keepalive
+
+# GitHub disables scheduled workflows after 60 days of repository inactivity.
+# This workflow pushes a trivial timestamp to a dedicated branch once a month
+# to keep the repository active and the Release Watcher schedule alive.
+# It uses only actions/checkout@v5 (Node 24) and shell commands, so there are
+# no third-party actions or deprecated Node runtimes involved.
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Push keepalive commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Create/update an orphan branch so the keepalive commits don't
+          # pollute the main history.
+          git checkout --orphan keepalive
+
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          printf 'keepalive %s\n' "$TIMESTAMP" > .keepalive
+          git add .keepalive
+          git commit -m "chore: keepalive ${TIMESTAMP}"
+          git push -f origin keepalive
