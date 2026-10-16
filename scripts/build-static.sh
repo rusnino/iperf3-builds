@@ -146,6 +146,8 @@ CFLAGS="-static -Wno-error=incompatible-pointer-types"
 configure_flags=(--disable-shared --enable-static-bin)
 if [ -n "${OPENSSL_DIR:-}" ]; then
   configure_flags+=(--with-openssl="$OPENSSL_DIR")
+else
+  configure_flags+=(--without-openssl)
 fi
 
 if [ -n "$HOST" ]; then

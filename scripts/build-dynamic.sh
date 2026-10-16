@@ -128,6 +128,8 @@ if [ -n "${OPENSSL_DIR:-}" ]; then
   export CPPFLAGS="${CPPFLAGS:-} -I${OPENSSL_DIR}/include"
   export LDFLAGS="${LDFLAGS:-} -L${OPENSSL_DIR}/lib"
   export LIBS="${LIBS:-} -ldl -lpthread"
+else
+  configure_flags+=(--without-openssl)
 fi
 
 ./configure "${configure_flags[@]}"

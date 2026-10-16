@@ -82,6 +82,8 @@ configure_flags=(--disable-shared)
 if [ -n "${OPENSSL_DIR:-}" ]; then
   configure_flags+=(--with-openssl="$OPENSSL_DIR")
   export LDFLAGS="${LDFLAGS:-} -L${OPENSSL_DIR}/lib -framework CoreFoundation -framework Security"
+else
+  configure_flags+=(--without-openssl)
 fi
 
 echo "=== Configuring macOS ${ARCH} build ==="
