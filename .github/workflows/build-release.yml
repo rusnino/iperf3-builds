@@ -207,6 +207,9 @@ jobs:
           pattern: build-macos-*
           merge-multiple: true
 
+      - name: Diagnostic - list downloaded files
+        run: find . -maxdepth 5 -type f | sort
+
       - name: Package universal2 binary
         env:
           IPERF_VERSION: ${{ inputs.version }}
