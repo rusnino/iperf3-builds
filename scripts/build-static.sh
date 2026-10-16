@@ -86,7 +86,7 @@ if [ "$ARCH" != "x86_64" ]; then
       toolchain_url="https://musl.cc/arm-linux-musleabihf-cross.tgz"
       ;;
   esac
-  curl -fsSL "$toolchain_url" | tar -xz -C "$CROSS_ROOT" --strip-components=1
+  curl -fsSL --retry 5 --retry-delay 10 "$toolchain_url" | tar -xz -C "$CROSS_ROOT" --strip-components=1
   if [ ! -x "$CC" ]; then
     echo "ERROR: cross compiler not found at ${CC}" >&2
     exit 1
@@ -103,7 +103,7 @@ TARBALL="iperf-${VERSION}.tar.gz"
 URL="https://github.com/esnet/iperf/releases/download/${VERSION}/${TARBALL}"
 SRC_DIR="iperf-${VERSION}"
 
-if curl -fsSL -o "$TARBALL" "$URL"; then
+if curl -fsSL --retry 5 --retry-delay 10 -o "$TARBALL" "$URL"; then
   echo "=== Extracting ${TARBALL} ==="
   tar -xzf "$TARBALL"
 else

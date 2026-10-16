@@ -3,3 +3,7 @@
 iperf3-*/
 iperf3-build-*/
 iperf/
+cross-toolchain/
+
+# Superpowers plan/ledger scratch space
+.superpowers/
