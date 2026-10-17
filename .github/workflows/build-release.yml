@@ -336,6 +336,58 @@ jobs:
               iperf3-*.tar.gz SHA256SUMS
           fi
 
+  scan-release-artifacts:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: version input is empty" >&2
+            exit 1
+          fi
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]] || ! [[ "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+            echo "ERROR: invalid version input: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          gh release download "$VERSION" --dir artifacts --repo ${{ github.repository }}
+          ls -la artifacts
+
+      - name: Run antivirus scan
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+          METADEFENDER_API_KEY: ${{ secrets.METADEFENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          ./scripts/scan-artifacts.sh artifacts
+
+      - name: Upload scan reports to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          gh release upload "$VERSION" \
+            artifacts/scan-reports/scan-report.json \
+            artifacts/scan-reports/scan-report.md \
+            --clobber --repo ${{ github.repository }}
+
   retry-failed-jobs:
     needs:
       - build-linux-static
@@ -344,6 +396,7 @@ jobs:
       - build-macos-arm64
       - package-macos-universal
       - release
+      - scan-release-artifacts
     runs-on: ubuntu-latest
     if: failure() && github.run_attempt < 3
     permissions:
