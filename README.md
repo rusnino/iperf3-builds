@@ -78,8 +78,6 @@ tar -xzf iperf3-${VERSION}-linux-x86_64-static.tar.gz
 | Linux aarch64 | static-auth | musl + OpenSSL | ARM64 servers and SBCs + RSA auth | Cross-compiled, smoke-tested with QEMU |
 | Linux x86 | static | musl | 32-bit x86 systems / containers | Cross-compiled from x86_64; runs natively on x86_64 |
 | Linux x86 | static-auth | musl + OpenSSL | 32-bit x86 + RSA auth | Cross-compiled from x86_64; runs natively on x86_64 |
-| Linux aarch64 | static | musl | ARM64 servers and SBCs | Cross-compiled, smoke-tested with QEMU |
-| Linux aarch64 | static-auth | musl + OpenSSL | ARM64 servers and SBCs + RSA auth | Cross-compiled, smoke-tested with QEMU |
 | Linux arm | static | musl | ARMv5 soft-float boards | Cross-compiled, smoke-tested with QEMU |
 | Linux arm | static-auth | musl + OpenSSL | ARMv5 soft-float boards + RSA auth | Cross-compiled, smoke-tested with QEMU |
 | Linux armhf | static | musl | ARMv6 hard-float boards | Cross-compiled, smoke-tested with QEMU |
