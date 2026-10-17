@@ -8,7 +8,10 @@
       "cpu": "x86-64",
       "abi": "sysv",
       "endianness": "little",
-      "notes": "Native 64-bit x86; runs without QEMU"
+      "notes": "Native 64-bit x86; runs without QEMU",
+      "elf_machine": "Advanced Micro Devices X86-64",
+      "elf_class": "ELF64",
+      "elf_data": "2's complement, little endian"
     },
     "x86": {
       "zig_target": "x86-linux-musl",
@@ -18,7 +21,10 @@
       "cpu": "i686",
       "abi": "sysv",
       "endianness": "little",
-      "notes": "32-bit x86; runs natively on x86_64 hosts"
+      "notes": "32-bit x86; runs natively on x86_64 hosts",
+      "elf_machine": "Intel 80386",
+      "elf_class": "ELF32",
+      "elf_data": "2's complement, little endian"
     },
     "aarch64": {
       "zig_target": "aarch64-linux-musl",
@@ -28,7 +34,10 @@
       "cpu": "aarch64",
       "abi": "sysv",
       "endianness": "little",
-      "notes": "ARM64"
+      "notes": "ARM64",
+      "elf_machine": "AArch64",
+      "elf_class": "ELF64",
+      "elf_data": "2's complement, little endian"
     },
     "arm": {
       "zig_target": "arm-linux-musleabi",
@@ -38,7 +47,10 @@
       "cpu": "armv5",
       "abi": "eabi",
       "endianness": "little",
-      "notes": "ARMv5 soft-float"
+      "notes": "ARMv5 soft-float",
+      "elf_machine": "ARM",
+      "elf_class": "ELF32",
+      "elf_data": "2's complement, little endian"
     },
     "armhf": {
       "zig_target": "arm-linux-musleabihf",
@@ -48,7 +60,10 @@
       "cpu": "armv6",
       "abi": "eabihf",
       "endianness": "little",
-      "notes": "ARMv6 hard-float"
+      "notes": "ARMv6 hard-float",
+      "elf_machine": "ARM",
+      "elf_class": "ELF32",
+      "elf_data": "2's complement, little endian"
     },
     "armv7": {
       "zig_target": "arm-linux-musleabihf",
@@ -58,7 +73,10 @@
       "cpu": "armv7",
       "abi": "eabihf",
       "endianness": "little",
-      "notes": "ARMv7 hard-float (same ABI as armhf, baseline tuned for v7)"
+      "notes": "ARMv7 hard-float (same ABI as armhf, baseline tuned for v7)",
+      "elf_machine": "ARM",
+      "elf_class": "ELF32",
+      "elf_data": "2's complement, little endian"
     },
     "mips": {
       "zig_target": "mips-linux-musl",
@@ -68,7 +86,10 @@
       "cpu": "mips",
       "abi": "o32",
       "endianness": "big",
-      "notes": "MIPS 32-bit big-endian o32"
+      "notes": "MIPS 32-bit big-endian o32",
+      "elf_machine": "MIPS R3000",
+      "elf_class": "ELF32",
+      "elf_data": "2's complement, big endian"
     },
     "mipsel": {
       "zig_target": "mipsel-linux-musl",
@@ -78,7 +99,10 @@
       "cpu": "mips",
       "abi": "o32",
       "endianness": "little",
-      "notes": "MIPS 32-bit little-endian o32"
+      "notes": "MIPS 32-bit little-endian o32",
+      "elf_machine": "MIPS R3000",
+      "elf_class": "ELF32",
+      "elf_data": "2's complement, little endian"
     },
     "mips64": {
       "zig_target": "mips64-linux-musl",
@@ -88,7 +112,10 @@
       "cpu": "mips64",
       "abi": "n64",
       "endianness": "big",
-      "notes": "MIPS 64-bit big-endian n64"
+      "notes": "MIPS 64-bit big-endian n64",
+      "elf_machine": "MIPS R3000",
+      "elf_class": "ELF64",
+      "elf_data": "2's complement, big endian"
     },
     "mips64el": {
       "zig_target": "mips64el-linux-musl",
@@ -98,7 +125,10 @@
       "cpu": "mips64",
       "abi": "n64",
       "endianness": "little",
-      "notes": "MIPS 64-bit little-endian n64"
+      "notes": "MIPS 64-bit little-endian n64",
+      "elf_machine": "MIPS R3000",
+      "elf_class": "ELF64",
+      "elf_data": "2's complement, little endian"
     },
     "powerpc": {
       "zig_target": "powerpc-linux-musl",
@@ -108,7 +138,10 @@
       "cpu": "powerpc",
       "abi": "sysv",
       "endianness": "big",
-      "notes": "32-bit PowerPC"
+      "notes": "32-bit PowerPC",
+      "elf_machine": "PowerPC or cisco 4500",
+      "elf_class": "ELF32",
+      "elf_data": "2's complement, big endian"
     },
     "ppc64le": {
       "zig_target": "powerpc64le-linux-musl",
@@ -118,7 +151,10 @@
       "cpu": "powerpc64",
       "abi": "elfv2",
       "endianness": "little",
-      "notes": "64-bit little-endian PowerPC"
+      "notes": "64-bit little-endian PowerPC",
+      "elf_machine": "PowerPC64",
+      "elf_class": "ELF64",
+      "elf_data": "2's complement, little endian"
     },
     "s390x": {
       "zig_target": "s390x-linux-musl",
@@ -128,7 +164,10 @@
       "cpu": "s390x",
       "abi": "sysv",
       "endianness": "big",
-      "notes": "IBM Z / s390x"
+      "notes": "IBM Z / s390x",
+      "elf_machine": "IBM S/390",
+      "elf_class": "ELF64",
+      "elf_data": "2's complement, big endian"
     },
     "riscv64": {
       "zig_target": "riscv64-linux-musl",
@@ -138,7 +177,10 @@
       "cpu": "riscv64",
       "abi": "lp64",
       "endianness": "little",
-      "notes": "RISC-V 64-bit"
+      "notes": "RISC-V 64-bit",
+      "elf_machine": "RISC-V",
+      "elf_class": "ELF64",
+      "elf_data": "2's complement, little endian"
     },
     "loongarch64": {
       "zig_target": "loongarch64-linux-musl",
@@ -148,7 +190,10 @@
       "cpu": "loongarch64",
       "abi": "sysv",
       "endianness": "little",
-      "notes": "LoongArch 64-bit"
+      "notes": "LoongArch 64-bit",
+      "elf_machine": "LoongArch",
+      "elf_class": "ELF64",
+      "elf_data": "2's complement, little endian"
     }
   }
 }
