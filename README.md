@@ -47,6 +47,11 @@ Each upstream release produces the following assets:
 A `SHA256SUMS` file is included with every release so you can verify the
 archives.
 
+Each release also includes `scan-report.json` and `scan-report.md` from
+antivirus scanning (VirusTotal + MetaDefender Cloud) and `.sig`/`.cert` files
+for Sigstore/cosign keyless signature verification. See `SECURITY.md` for
+details.
+
 > **Note:** Assets without `-auth` do not include OpenSSL, so iperf3's RSA
 > authentication feature is not available. Use the `-auth` archives when you
 > need authentication.

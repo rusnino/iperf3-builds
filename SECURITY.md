@@ -49,6 +49,26 @@ report is attached; this window is documented in the release notes.
 If you find an engine flagging a release archive, please open a security issue
 (see below) and include the scanner report and file hash.
 
+## Verifying signatures
+
+Release archives are signed with [Sigstore/cosign](https://www.sigstore.dev/) in
+keyless mode from the GitHub Actions workflow. Each archive has a matching
+`.sig` and `.cert` file attached to the release.
+
+Install `cosign` and verify a downloaded archive:
+
+```bash
+cosign verify-blob \
+  --signature iperf3-3.22-linux-x86_64-static.tar.gz.sig \
+  --certificate iperf3-3.22-linux-x86_64-static.tar.gz.cert \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/rusnino/iperf3-builds/.github/workflows/build-release.yml@refs/tags/' \
+  iperf3-3.22-linux-x86_64-static.tar.gz
+```
+
+The `--certificate-identity-regexp` expects the issuer to be the
+`build-release.yml` workflow running from a tag push or workflow dispatch.
+
 ## Reporting security issues
 
 Please report sensitive security concerns by opening a GitHub issue with the
