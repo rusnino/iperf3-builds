@@ -16,12 +16,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-static:
+  generate-linux-static-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Generate matrix from targets.json
+        id: set
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          data = json.load(open('targets.json'))
+          matrix = {'include': []}
+          for arch, meta in data['arch'].items():
+              matrix['include'].append({'arch': arch, 'auth': False})
+              if meta.get('auth', True):
+                  matrix['include'].append({'arch': arch, 'auth': True})
+          print(json.dumps(matrix))
+          PY > matrix.json
+          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+
+  build-linux-static:
+    needs: generate-linux-static-matrix
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        auth: [false, true]
+      matrix: ${{ fromJson(needs.generate-linux-static-matrix.outputs.matrix) }}
     steps:
       - name: Validate version input
         env:
@@ -40,9 +64,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Build static (musl) binary
+      - name: Build static (${{ matrix.arch }}) binary
         env:
           IPERF_VERSION: ${{ inputs.version }}
+          ARCH: ${{ matrix.arch }}
           AUTH: ${{ matrix.auth }}
         run: |
           set -euo pipefail
@@ -51,8 +76,8 @@ jobs:
       - name: Upload static artifact
         uses: actions/upload-artifact@v6
         with:
-          name: release-linux-x86_64-static${{ matrix.auth && '-auth' || '' }}
-          path: iperf3-*-linux-x86_64-static${{ matrix.auth && '-auth' || '' }}.tar.gz
+          name: release-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}
+          path: iperf3-*-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
 
   build-dynamic:
@@ -97,61 +122,6 @@ jobs:
         with:
           name: release-linux-x86_64-dynamic${{ matrix.auth && '-auth' || '' }}
           path: iperf3-build-dynamic${{ matrix.auth && '-auth' || '' }}/iperf3-*-linux-x86_64-dynamic${{ matrix.auth && '-auth' || '' }}.tar.gz
-          if-no-files-found: error
-
-  build-linux-static-cross:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch:
-          - x86
-          - aarch64
-          - arm
-          - armhf
-          - armv7
-          - mips
-          - mipsel
-          - mips64
-          - mips64el
-          - powerpc
-          - ppc64le
-          - s390x
-          - riscv64
-          - loongarch64
-        auth: [false, true]
-    steps:
-      - name: Validate version input
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          set -euo pipefail
-          if [ -z "$VERSION" ]; then
-            echo "ERROR: version input is empty" >&2
-            exit 1
-          fi
-          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
-            echo "ERROR: invalid version input: $VERSION" >&2
-            exit 1
-          fi
-
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Build static (${{ matrix.arch }}) binary
-        env:
-          IPERF_VERSION: ${{ inputs.version }}
-          ARCH: ${{ matrix.arch }}
-          AUTH: ${{ matrix.auth }}
-        run: |
-          set -euo pipefail
-          ./scripts/build-static.sh
-
-      - name: Upload static artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}
-          path: iperf3-*-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
 
   build-macos-x86_64:
@@ -268,9 +238,8 @@ jobs:
 
   release:
     needs:
-      - build-static
+      - build-linux-static
       - build-dynamic
-      - build-linux-static-cross
       - build-macos-x86_64
       - build-macos-arm64
       - package-macos-universal
@@ -354,9 +323,8 @@ jobs:
 
   retry-failed-jobs:
     needs:
-      - build-static
+      - build-linux-static
       - build-dynamic
-      - build-linux-static-cross
       - build-macos-x86_64
       - build-macos-arm64
       - package-macos-universal
