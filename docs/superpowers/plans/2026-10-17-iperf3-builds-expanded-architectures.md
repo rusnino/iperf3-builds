@@ -1,5 +1,7 @@
 # Plan: Expand iperf3-builds Linux architecture matrix
 
+> **Status:** superseded by `2026-10-17-migrate-to-zig-cc.md` and the upcoming `2026-10-17-experimental-architectures.md`. This draft predates the Zig-based toolchain and the `targets.json` catalog; do not execute it as-is.
+
 Spec: user request to add as many architectures as possible on free GitHub
 runners, following the `userdocs` musl cross-compilation approach.
 

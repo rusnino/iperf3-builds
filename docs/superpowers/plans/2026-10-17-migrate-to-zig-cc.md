@@ -1,6 +1,6 @@
 # Migrate stable Linux static builds to zig cc + OpenSSL from source
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Replace `userdocs/qbt-musl-cross-make` toolchains and `userdocs/openssl` prebuilt assets with `zig cc` and OpenSSL built from source, while preserving all 15 existing stable Linux static targets and their `-auth` variants.
 
@@ -48,7 +48,7 @@
 **Interfaces:**
 - Produces: `targets.json` with top-level `arch` key mapping public ARCH name to an object containing `zig_target`, `openssl_target`, `qemu`, `auth`, `notes`.
 
-- [ ] **Step 1: Draft catalog for all 15 stable targets**
+- [x] **Step 1: Draft catalog for all 15 stable targets**
 
 ```json
 {
@@ -207,12 +207,12 @@
 }
 ```
 
-- [ ] **Step 2: Validate JSON syntax**
+- [x] **Step 2: Validate JSON syntax**
 
 Run: `python3 -m json.tool targets.json > /dev/null`
 Expected: no output, exit 0.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add targets.json
@@ -230,16 +230,16 @@ git commit -m "chore: add stable Linux static targets catalog"
 - Consumes: binary path, target metadata (machine, class, endianness) from catalog.
 - Produces: exit 0 on success, stderr diagnostics and exit 1 on failure.
 
-- [ ] **Step 1: Implement helper**
+- [x] **Step 1: Implement helper**
 
 `scripts/verify-elf.sh` reads machine/class/endianness from `readelf -h`, ensures no `PT_INTERP` and no `DT_NEEDED` from `readelf -l`/`-d`.
 
-- [ ] **Step 2: Test helper against known-good aarch64 binary**
+- [x] **Step 2: Test helper against known-good aarch64 binary**
 
 Run: `ARCH=aarch64 ./scripts/build-static.sh` from previous userdocs-based build to produce a binary, then `scripts/verify-elf.sh iperf3-build-static-aarch64/iperf-3.22/src/iperf3 aarch64`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/verify-elf.sh
@@ -257,35 +257,35 @@ git commit -m "feat: add ELF verification helper"
 - Consumes: `targets.json`, environment variables `IPERF_VERSION`, `ARCH`, `AUTH`.
 - Produces: archive `iperf3-${VERSION}-linux-${ARCH}-static${AUTH_SUFFIX}.tar.gz`.
 
-- [ ] **Step 1: Add zig installation**
+- [x] **Step 1: Add zig installation**
 
 Download zig 0.14.1 x86_64-linux tarball, verify sha256, extract to a temp dir, add to PATH.
 
-- [ ] **Step 2: Read target metadata from catalog**
+- [x] **Step 2: Read target metadata from catalog**
 
 Use `python3 -c 'import json; ...'` or `jq` to extract `zig_target`, `openssl_target`, `qemu`, etc.
 
-- [ ] **Step 3: Create zig cc wrapper script**
+- [x] **Step 3: Create zig cc wrapper script**
 
 Write a wrapper `/tmp/zig-cc-$ARCH` that executes `zig cc -target <zig_target> "$@"`. Set `CC` to this wrapper.
 
-- [ ] **Step 4: Build non-auth iperf3**
+- [x] **Step 4: Build non-auth iperf3**
 
 Configure with `--host=<zig_target> --disable-shared --enable-static-bin --without-openssl`, build, verify static linkage.
 
-- [ ] **Step 5: Smoke test non-auth**
+- [x] **Step 5: Smoke test non-auth**
 
 Run native or under QEMU with `--version`.
 
-- [ ] **Step 6: Build auth variant (when AUTH=true)**
+- [x] **Step 6: Build auth variant (when AUTH=true)**
 
 Download OpenSSL source (stable 3.x LTS), configure with `CC=<wrapper> ./Configure <openssl_target> no-shared no-zlib ...`, install to a prefix, then build iperf3 `--with-openssl=<prefix>`.
 
-- [ ] **Step 7: Verify auth binary**
+- [x] **Step 7: Verify auth binary**
 
 Check static linkage and that `--version` includes `authentication`.
 
-- [ ] **Step 8: Package and commit**
+- [x] **Step 8: Package and commit**
 
 ```bash
 git add scripts/build-static.sh
@@ -303,20 +303,20 @@ git commit -m "feat: migrate build-static.sh to zig cc and OpenSSL from source"
 - Consumes: `targets.json`.
 - Produces: matrix `arch` populated from catalog.
 
-- [ ] **Step 1: Generate matrix in workflow**
+- [x] **Step 1: Generate matrix in workflow**
 
 Use a step that runs `python3` to read `targets.json` and emit JSON matrix. Keep auth dimension `[false, true]` but skip `true` where catalog `auth` is false.
 
-- [ ] **Step 2: Remove toolchain download step**
+- [x] **Step 2: Remove toolchain download step**
 
 The script now installs zig itself; no `qbt-musl-cross-make` download.
 
-- [ ] **Step 3: Validate workflow YAML**
+- [x] **Step 3: Validate workflow YAML**
 
 Run: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/build-release.yml'))"`
 Expected: no errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/build-release.yml
@@ -334,18 +334,18 @@ git commit -m "ci: generate Linux static matrix from targets.json and use zig cc
 - Consumes: updated `scripts/build-static.sh`.
 - Produces: 30 archives (15 plain + 15 auth) and verification logs.
 
-- [ ] **Step 1: Run non-auth builds for all 15 arches**
+- [x] **Step 1: Run non-auth builds for all 15 arches**
 
 Loop over `x86_64 x86 aarch64 arm armhf armv7 mips mipsel mips64 mips64el powerpc ppc64le s390x riscv64 loongarch64`.
 For each: `ARCH=$arch IPERF_VERSION=3.22 ./scripts/build-static.sh`.
 Expected: each builds, ELF verification passes, smoke test passes.
 
-- [ ] **Step 2: Run auth builds for a representative subset**
+- [x] **Step 2: Run auth builds for a representative subset**
 
 At minimum: `x86_64`, `aarch64`, `armv7`, `mips64el`, `powerpc`, `s390x`, `riscv64`, `loongarch64`.
 Expected: each builds, `--version` reports `authentication`, ELF static.
 
-- [ ] **Step 3: Document any failures**
+- [x] **Step 3: Document any failures**
 
 If a target fails, note whether it is plain, auth, or both, and the error. Decide with human partner whether to disable auth for that target or fix.
 
@@ -361,19 +361,19 @@ If a target fails, note whether it is plain, auth, or both, and the error. Decid
 - Consumes: `targets.json`.
 - Produces: user-facing table of stable targets and updated backlog.
 
-- [ ] **Step 1: Replace old variants table**
+- [x] **Step 1: Replace old variants table**
 
 Add a single table with columns: Target, ISA/CPU baseline, ABI, Endianness, FPU, Auth, Testing, Limitations.
 
-- [ ] **Step 2: Note toolchain/source provenance**
+- [x] **Step 2: Note toolchain/source provenance**
 
 Mention that builds use official `zig cc` and OpenSSL source, not third-party prebuilt toolchains.
 
-- [ ] **Step 3: Update future enhancements**
+- [x] **Step 3: Update future enhancements**
 
 Mark Linux static toolchain migration as done; list Phase 2 expansion candidates.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md docs/superpowers/notes/iperf3-builds-future-enhancements.md
@@ -385,7 +385,7 @@ git commit -m "docs: document zig cc based stable targets and provenance"
 ## Self-review checklist
 
 - [x] Spec coverage: migration to zig cc, catalog, OpenSSL source, ELF checks, workflow matrix, docs are all represented.
-- [ ] Step scan: each step is one actionable item with a checkable result.
-- [ ] Type consistency: JSON field names match between catalog, script, workflow.
-- [ ] Review Focus: each risk has a verification step in Task 3 or Task 5.
-- [ ] Proportion: plan is shorter than the spec; bodies left to implementer except exact values.
+- [x] Step scan: each step is one actionable item with a checkable result.
+- [x] Type consistency: JSON field names match between catalog, script, workflow.
+- [x] Review Focus: each risk has a verification step in Task 3 or Task 5.
+- [x] Proportion: plan is shorter than the spec; bodies left to implementer except exact values.

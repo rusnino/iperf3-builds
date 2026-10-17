@@ -1,5 +1,7 @@
 # iperf3-builds Implementation Plan
 
+> **Status:** completed. The repository, watcher workflow, Linux x86_64 static/dynamic builds, and initial release pipeline described here are all functional. Subsequent work is tracked in `2026-10-17-migrate-to-zig-cc.md` and the platform coverage spec.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Create and configure the `rusnino/iperf3-builds` GitHub repository so it automatically detects new releases of `esnet/iperf`, builds static (musl) and dynamic (glibc) Linux x86_64 binaries, and publishes them as GitHub Releases with SHA256 checksums and upstream release notes.
