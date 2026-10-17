@@ -11,7 +11,8 @@
       "notes": "Native 64-bit x86; runs without QEMU",
       "elf_machine": "Advanced Micro Devices X86-64",
       "elf_class": "ELF64",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     },
     "x86": {
       "zig_target": "x86-linux-musl",
@@ -24,7 +25,8 @@
       "notes": "32-bit x86; runs natively on x86_64 hosts",
       "elf_machine": "Intel 80386",
       "elf_class": "ELF32",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     },
     "aarch64": {
       "zig_target": "aarch64-linux-musl",
@@ -37,7 +39,8 @@
       "notes": "ARM64",
       "elf_machine": "AArch64",
       "elf_class": "ELF64",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     },
     "arm": {
       "zig_target": "arm-linux-musleabi",
@@ -50,7 +53,8 @@
       "notes": "ARMv5 soft-float",
       "elf_machine": "ARM",
       "elf_class": "ELF32",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     },
     "armhf": {
       "zig_target": "arm-linux-musleabihf",
@@ -63,7 +67,8 @@
       "notes": "ARMv6 hard-float",
       "elf_machine": "ARM",
       "elf_class": "ELF32",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     },
     "armv7": {
       "zig_target": "arm-linux-musleabihf",
@@ -76,7 +81,8 @@
       "notes": "ARMv7 hard-float (same ABI as armhf, baseline tuned for v7)",
       "elf_machine": "ARM",
       "elf_class": "ELF32",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     },
     "mips": {
       "zig_target": "mips-linux-musleabi",
@@ -89,7 +95,8 @@
       "notes": "MIPS 32-bit big-endian o32 soft-float",
       "elf_machine": "MIPS R3000",
       "elf_class": "ELF32",
-      "elf_data": "2's complement, big endian"
+      "elf_data": "2's complement, big endian",
+      "stable": true
     },
     "mipsel": {
       "zig_target": "mipsel-linux-musleabi",
@@ -102,7 +109,8 @@
       "notes": "MIPS 32-bit little-endian o32 soft-float",
       "elf_machine": "MIPS R3000",
       "elf_class": "ELF32",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     },
     "mips64": {
       "zig_target": "mips64-linux-muslabi64",
@@ -115,7 +123,8 @@
       "notes": "MIPS 64-bit big-endian n64 soft-float",
       "elf_machine": "MIPS R3000",
       "elf_class": "ELF64",
-      "elf_data": "2's complement, big endian"
+      "elf_data": "2's complement, big endian",
+      "stable": true
     },
     "mips64el": {
       "zig_target": "mips64el-linux-muslabi64",
@@ -128,7 +137,8 @@
       "notes": "MIPS 64-bit little-endian n64 soft-float",
       "elf_machine": "MIPS R3000",
       "elf_class": "ELF64",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     },
     "powerpc": {
       "zig_target": "powerpc-linux-musleabi",
@@ -141,7 +151,8 @@
       "notes": "32-bit PowerPC soft-float",
       "elf_machine": "PowerPC",
       "elf_class": "ELF32",
-      "elf_data": "2's complement, big endian"
+      "elf_data": "2's complement, big endian",
+      "stable": true
     },
     "ppc64le": {
       "zig_target": "powerpc64le-linux-musl",
@@ -154,7 +165,8 @@
       "notes": "64-bit little-endian PowerPC",
       "elf_machine": "PowerPC64",
       "elf_class": "ELF64",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     },
     "s390x": {
       "zig_target": "s390x-linux-musl",
@@ -167,7 +179,8 @@
       "notes": "IBM Z / s390x",
       "elf_machine": "IBM S/390",
       "elf_class": "ELF64",
-      "elf_data": "2's complement, big endian"
+      "elf_data": "2's complement, big endian",
+      "stable": true
     },
     "riscv64": {
       "zig_target": "riscv64-linux-musl",
@@ -180,7 +193,8 @@
       "notes": "RISC-V 64-bit",
       "elf_machine": "RISC-V",
       "elf_class": "ELF64",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     },
     "loongarch64": {
       "zig_target": "loongarch64-linux-musl",
@@ -193,7 +207,8 @@
       "notes": "LoongArch 64-bit",
       "elf_machine": "LoongArch",
       "elf_class": "ELF64",
-      "elf_data": "2's complement, little endian"
+      "elf_data": "2's complement, little endian",
+      "stable": true
     }
   }
 }

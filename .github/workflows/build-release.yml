@@ -33,6 +33,8 @@ jobs:
           data = json.load(open('targets.json'))
           matrix = {'include': []}
           for arch, meta in data['arch'].items():
+              if not meta.get('stable', False):
+                  continue
               matrix['include'].append({'arch': arch, 'auth': False})
               if meta.get('auth', True):
                   matrix['include'].append({'arch': arch, 'auth': True})
