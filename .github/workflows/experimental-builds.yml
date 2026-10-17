@@ -8,8 +8,7 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: experimental-${{ inputs.version }}
@@ -18,11 +17,13 @@ concurrency:
 jobs:
   generate-experimental-matrix:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Generate matrix from targets.json
         id: set
@@ -45,6 +46,9 @@ jobs:
   build-experimental:
     needs: generate-experimental-matrix
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.generate-experimental-matrix.outputs.matrix) }}
@@ -58,13 +62,13 @@ jobs:
             echo "ERROR: version input is empty" >&2
             exit 1
           fi
-          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]] || ! [[ "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]]; then
             echo "ERROR: invalid version input: $VERSION" >&2
             exit 1
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Build static (${{ matrix.arch }}) binary
         env:
@@ -76,7 +80,7 @@ jobs:
           ./scripts/build-static.sh
 
       - name: Upload experimental artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: experimental-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}
           path: iperf3-*-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}.tar.gz
