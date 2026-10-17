@@ -94,8 +94,6 @@ ZIG_VERSION="${ZIG_VERSION:-0.14.1}"
 ZIG_DIR="${ZIG_DIR:-$REPO_ROOT/.zig}"
 ZIG_BIN="$ZIG_DIR/zig"
 
-ZIG_SHA256="${ZIG_SHA256:-}"
-
 if [ ! -x "$ZIG_BIN" ]; then
   echo "=== Installing Zig ${ZIG_VERSION} ==="
   rm -rf "$ZIG_DIR"
@@ -109,17 +107,44 @@ if [ ! -x "$ZIG_BIN" ]; then
     *) echo "ERROR: unsupported host for Zig install: ${host_arch}-${host_os}" >&2; exit 1 ;;
   esac
 
+  # Fetch the official Zig download index. This is the canonical source for
+  # tarball URLs and checksums after the Zig source repository migrated to
+  # Codeberg; binary releases remain distributed via ziglang.org and its
+  # community mirrors.
+  index_url="https://ziglang.org/download/index.json"
+  index_file="/tmp/zig-index-${ZIG_VERSION}.json"
+  curl -fsSL --retry 5 --retry-delay 10 -o "$index_file" "$index_url"
+
+  zig_metadata=$(python3 - "$index_file" "$ZIG_VERSION" "$zig_tuple" <<'PY'
+import sys, json
+index_file, version, host = sys.argv[1:]
+data = json.load(open(index_file))
+if version not in data:
+    print(f"ERROR: Zig version {version} not in download index", file=sys.stderr)
+    sys.exit(1)
+if host not in data[version]:
+    print(f"ERROR: host {host} not in Zig {version} download index", file=sys.stderr)
+    sys.exit(1)
+meta = data[version][host]
+print(meta["tarball"])
+print(meta["shasum"])
+PY
+)
+
+  url=$(echo "$zig_metadata" | sed -n '1p')
+  expected_sha=$(echo "$zig_metadata" | sed -n '2p')
+
   zig_basename="zig-${zig_tuple}-${ZIG_VERSION}"
   tarball="${zig_basename}.tar.xz"
-  url="https://ziglang.org/download/${ZIG_VERSION}/${tarball}"
+  tarball_path="/tmp/${tarball}"
 
-  curl -fsSL --retry 5 --retry-delay 10 -o "/tmp/${tarball}" "$url"
+  echo "Downloading Zig from: $url"
+  curl -fsSL --retry 5 --retry-delay 10 -o "$tarball_path" "$url"
 
-  if [ -n "$ZIG_SHA256" ]; then
-    echo "$ZIG_SHA256  /tmp/${tarball}" | sha256sum -c -
-  fi
+  echo "Verifying Zig tarball SHA-256"
+  echo "$expected_sha  $tarball_path" | sha256sum -c -
 
-  tar -xJf "/tmp/${tarball}" -C "$ZIG_DIR" --strip-components=1
+  tar -xJf "$tarball_path" -C "$ZIG_DIR" --strip-components=1
 fi
 
 export PATH="$ZIG_DIR:$PATH"
