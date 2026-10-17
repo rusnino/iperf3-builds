@@ -153,7 +153,7 @@ def _virustotal_poll_analysis(analysis_id: str, attempts: int = 10, interval: in
     return {"status": "timeout", "method": "upload", "analysis_id": analysis_id}
 
 
-def metadefender_lookup(sha256: str) -> dict:
+def metadefender_scan(file_path: Path, sha256: str) -> dict:
     if not METADEFENDER_API_KEY:
         return {"status": "skipped", "reason": "METADEFENDER_API_KEY not configured"}
 
@@ -169,12 +169,59 @@ def metadefender_lookup(sha256: str) -> dict:
             "total_detected": int(scan_results.get("total_detected", 0)),
             "scan_all_result_a": scan_results.get("scan_all_result_a", ""),
             "permalink": payload.get("data", {}).get("permalink", "") or payload.get("permalink", ""),
+            "method": "lookup",
         }
 
     if status in (401, 403):
         return {"status": "skipped", "reason": "invalid or unauthorized MetaDefender API key"}
 
-    return {"status": "error", "http_status": status, "error": error or payload}
+    if status == 404:
+        # Hash not known to MetaDefender: upload the file for scanning.
+        file_data = file_path.read_bytes()
+        upload_headers = _metadefender_headers()
+        upload_headers["filename"] = file_path.name
+        upload_headers["Content-Type"] = "application/octet-stream"
+        upload_headers["Content-Length"] = str(len(file_data))
+        up_status, up_payload, up_error = _http_json(
+            "POST", "https://api.metadefender.com/v4/file", upload_headers, data=file_data
+        )
+        _metadefender_sleep()
+
+        if up_status in (401, 403):
+            return {"status": "skipped", "reason": "invalid or unauthorized MetaDefender API key"}
+        if up_status == 200 and isinstance(up_payload, dict):
+            data_id = up_payload.get("data_id", "")
+            if data_id:
+                return _metadefender_poll(data_id)
+
+        return {"status": "error", "method": "upload", "http_status": up_status, "error": up_error or up_payload}
+
+    return {"status": "error", "method": "lookup", "http_status": status, "error": error or payload}
+
+
+def _metadefender_poll(data_id: str, attempts: int = 30, interval: int = 10) -> dict:
+    url = f"https://api.metadefender.com/v4/file/{data_id}"
+    for _ in range(attempts):
+        status, payload, error = _http_json("GET", url, _metadefender_headers())
+        _metadefender_sleep()
+
+        if status in (401, 403):
+            return {"status": "skipped", "reason": "invalid or unauthorized MetaDefender API key"}
+        if status == 200 and isinstance(payload, dict):
+            scan_results = payload.get("scan_results", {})
+            progress = int(scan_results.get("progress_percentage", 0)) if scan_results else 0
+            if progress == 100 or scan_results.get("scan_all_result_a") is not None:
+                return {
+                    "status": "completed",
+                    "total_avs": int(scan_results.get("total_avs", 0)),
+                    "total_detected": int(scan_results.get("total_detected", 0)),
+                    "scan_all_result_a": scan_results.get("scan_all_result_a", ""),
+                    "permalink": payload.get("data", {}).get("permalink", "") or payload.get("permalink", ""),
+                    "method": "upload",
+                }
+        time.sleep(interval)
+
+    return {"status": "timeout", "method": "upload", "data_id": data_id}
 
 
 def scan_manifest(manifest_path: Path, output_dir: Path) -> Path:
@@ -191,7 +238,7 @@ def scan_manifest(manifest_path: Path, output_dir: Path) -> Path:
         vt_result = virustotal_lookup_or_submit(file_path, sha256)
         _vt_sleep()
 
-        md_result = metadefender_lookup(sha256)
+        md_result = metadefender_scan(file_path, sha256)
 
         results.append(
             {
