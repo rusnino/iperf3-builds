@@ -98,6 +98,9 @@ def virustotal_lookup_or_submit(file_path: Path, sha256: str) -> dict:
         result["method"] = "lookup"
         return result
 
+    if status in (401, 403):
+        return {"status": "skipped", "reason": "invalid or unauthorized VirusTotal API key"}
+
     if status == 404:
         # Not previously seen: upload the file.
         with file_path.open("rb") as fp:
@@ -167,6 +170,9 @@ def metadefender_lookup(sha256: str) -> dict:
             "scan_all_result_a": scan_results.get("scan_all_result_a", ""),
             "permalink": payload.get("data", {}).get("permalink", "") or payload.get("permalink", ""),
         }
+
+    if status in (401, 403):
+        return {"status": "skipped", "reason": "invalid or unauthorized MetaDefender API key"}
 
     return {"status": "error", "http_status": status, "error": error or payload}
 
