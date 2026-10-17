@@ -90,7 +90,7 @@ else
 fi
 
 # Install the official Zig toolchain.
-ZIG_VERSION="${ZIG_VERSION:-0.14.1}"
+ZIG_VERSION="${ZIG_VERSION:-0.17.0}"
 ZIG_DIR="${ZIG_DIR:-$REPO_ROOT/.zig}"
 ZIG_BIN="$ZIG_DIR/zig"
 
