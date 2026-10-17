@@ -104,7 +104,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [aarch64, armv7]
+        arch:
+          - x86
+          - aarch64
+          - arm
+          - armhf
+          - armv7
+          - mips
+          - mipsel
+          - mips64
+          - mips64el
+          - powerpc
+          - ppc64le
+          - s390x
+          - riscv64
+          - loongarch64
         auth: [false, true]
     steps:
       - name: Validate version input

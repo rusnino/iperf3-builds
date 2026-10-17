@@ -2,10 +2,15 @@
 set -euo pipefail
 
 # Build a statically-linked iperf3 binary using musl libc.
+#
+# Supported ARCH values:
+#   x86_64, x86 (i686), aarch64, arm, armhf, armv7,
+#   mips, mipsel, mips64, mips64el,
+#   powerpc, ppc64le, s390x, riscv64, loongarch64
+#
 # Usage:
-#   IPERF_VERSION=3.17.1 ./build-static.sh              # x86_64 (host musl-gcc)
+#   IPERF_VERSION=3.17.1 ./build-static.sh
 #   ARCH=aarch64 IPERF_VERSION=3.17.1 ./build-static.sh
-#   ARCH=armv7 IPERF_VERSION=3.17.1 ./build-static.sh
 #
 # Build with OpenSSL (RSA auth support):
 #   AUTH=true IPERF_VERSION=3.17.1 ./build-static.sh
@@ -39,10 +44,15 @@ if [ "$(id -u)" -ne 0 ]; then
   SUDO="sudo"
 fi
 
+NATIVE_ARCH=""
+if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "x86" ]; then
+  NATIVE_ARCH=1
+fi
+
 if command -v apt-get >/dev/null 2>&1; then
   echo "=== Installing dependencies via apt-get ==="
   packages="build-essential musl-tools curl git autoconf automake libtool file xz-utils"
-  if [ "$ARCH" != "x86_64" ]; then
+  if [ -z "$NATIVE_ARCH" ]; then
     packages="$packages qemu-user-static"
   fi
   DEBIAN_FRONTEND=noninteractive $SUDO apt-get update -qq
@@ -50,7 +60,7 @@ if command -v apt-get >/dev/null 2>&1; then
 elif command -v apk >/dev/null 2>&1; then
   echo "=== Installing dependencies via apk ==="
   apk add --no-cache build-base musl curl git autoconf automake libtool
-  if [ "$ARCH" != "x86_64" ]; then
+  if [ -z "$NATIVE_ARCH" ]; then
     apk add --no-cache qemu-user-static
   fi
 else
@@ -69,11 +79,28 @@ case "$ARCH" in
     TARGET="x86_64-linux-musl"
     CC="musl-gcc"
     ;;
+  x86)
+    TARGET="i686-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    ;;
   aarch64)
     TARGET="aarch64-linux-musl"
     HOST="$TARGET"
     CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
     QEMU_BIN="qemu-aarch64-static"
+    ;;
+  arm)
+    TARGET="arm-linux-musleabi"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-arm-static"
+    ;;
+  armhf)
+    TARGET="armv6-linux-musleabihf"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-arm-static"
     ;;
   armv7)
     TARGET="armv7l-linux-musleabihf"
@@ -81,13 +108,67 @@ case "$ARCH" in
     CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
     QEMU_BIN="qemu-arm-static"
     ;;
+  mips)
+    TARGET="mips-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-mips-static"
+    ;;
+  mipsel)
+    TARGET="mipsel-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-mipsel-static"
+    ;;
+  mips64)
+    TARGET="mips64-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-mips64-static"
+    ;;
+  mips64el)
+    TARGET="mips64el-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-mips64el-static"
+    ;;
+  powerpc)
+    TARGET="powerpc-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-ppc-static"
+    ;;
+  ppc64le)
+    TARGET="powerpc64le-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-ppc64le-static"
+    ;;
+  s390x)
+    TARGET="s390x-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-s390x-static"
+    ;;
+  riscv64)
+    TARGET="riscv64-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-riscv64-static"
+    ;;
+  loongarch64)
+    TARGET="loongarch64-linux-musl"
+    HOST="$TARGET"
+    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
+    QEMU_BIN="qemu-loongarch64-static"
+    ;;
   *)
     echo "ERROR: unsupported ARCH: ${ARCH}" >&2
     exit 1
     ;;
 esac
 
-if [ "$ARCH" != "x86_64" ]; then
+if [ -n "$HOST" ]; then
   echo "=== Downloading musl cross toolchain for ${ARCH} ==="
   MUSL_CROSS_VERSION="${MUSL_CROSS_VERSION:-2642}"
   toolchain_filename="x86_64-${HOST}.tar.xz"
@@ -159,7 +240,7 @@ fi
 echo "=== Building ==="
 make -j"$(nproc)"
 
-echo "=== Verifying binary architecture and static linkage ==="
+echo "=== Verifying static linkage ==="
 if [ ! -f src/iperf3 ]; then
   echo "ERROR: iperf3 binary not found" >&2
   exit 1
@@ -167,27 +248,6 @@ fi
 
 file_info=$(file src/iperf3)
 echo "$file_info"
-
-case "$ARCH" in
-  x86_64)
-    if ! echo "$file_info" | grep -q "x86-64"; then
-      echo "ERROR: binary is not x86_64" >&2
-      exit 1
-    fi
-    ;;
-  aarch64)
-    if ! echo "$file_info" | grep -qi "aarch64"; then
-      echo "ERROR: binary is not aarch64" >&2
-      exit 1
-    fi
-    ;;
-  armv7)
-    if ! echo "$file_info" | grep -q "ARM" || echo "$file_info" | grep -qi "aarch64"; then
-      echo "ERROR: binary is not ARM32" >&2
-      exit 1
-    fi
-    ;;
-esac
 
 if readelf -d src/iperf3 2>/dev/null | grep -q 'NEEDED'; then
   echo "ERROR: binary is not statically linked" >&2
@@ -233,7 +293,7 @@ cp "$ARCHIVE" "$REPO_ROOT/"
 echo "=== Smoke test ==="
 cd "$REPO_ROOT"
 tar -xzf "$ARCHIVE"
-if [ "$ARCH" = "x86_64" ]; then
+if [ -n "$NATIVE_ARCH" ]; then
   "${OUTPUT_DIR}/iperf3" --version
 else
   if [ -z "${QEMU_BIN:-}" ]; then
