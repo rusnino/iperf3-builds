@@ -23,9 +23,9 @@ expected_machine=$(python3 -c "import json; print(json.load(open('$CATALOG'))['a
 echo "=== ELF header verification for $ARCH ==="
 header=$(readelf -h "$BINARY")
 
-actual_class=$(echo "$header" | awk '/^  Class:/{print $2}')
-actual_data=$(echo "$header" | awk '/^  Data:/{sub(/^  Data: /, ""); print}')
-actual_machine=$(echo "$header" | awk '/^  Machine:/{sub(/^  Machine: /, ""); print}')
+actual_class=$(echo "$header" | awk '/^[[:space:]]*Class:/{sub(/^[[:space:]]*Class:[[:space:]]*/, ""); print; exit}')
+actual_data=$(echo "$header" | awk '/^[[:space:]]*Data:/{sub(/^[[:space:]]*Data:[[:space:]]*/, ""); print; exit}')
+actual_machine=$(echo "$header" | awk '/^[[:space:]]*Machine:/{sub(/^[[:space:]]*Machine:[[:space:]]*/, ""); print; exit}')
 
 echo "Class:    $actual_class (expected $expected_class)"
 echo "Data:     $actual_data (expected $expected_data)"

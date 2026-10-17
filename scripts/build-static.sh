@@ -205,8 +205,14 @@ if [ "$AUTH" = "true" ]; then
     -DOPENSSL_NO_AFALGENG \
     threads
 
-  make -j"$(nproc)"
+  make -j"$(nproc)" build_libs
   make install_sw
+
+  # iperf3's configure looks in $prefix/lib; OpenSSL may install to lib64.
+  if [ -d "${OPENSSL_PREFIX}/lib64" ] && [ ! -d "${OPENSSL_PREFIX}/lib" ]; then
+    ln -s lib64 "${OPENSSL_PREFIX}/lib"
+  fi
+
   cd "$BUILD_DIR"
 fi
 
