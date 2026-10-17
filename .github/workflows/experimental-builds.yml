@@ -1,0 +1,83 @@
+name: Experimental architecture builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Upstream iperf3 version/tag to build (e.g. 3.22)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: experimental-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  generate-experimental-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Generate matrix from targets.json
+        id: set
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          data = json.load(open('targets.json'))
+          matrix = {'include': []}
+          for arch, meta in data['arch'].items():
+              if meta.get('stable', True):
+                  continue
+              matrix['include'].append({'arch': arch, 'auth': False})
+              if meta.get('auth', True):
+                  matrix['include'].append({'arch': arch, 'auth': True})
+          print(json.dumps(matrix))
+          PY > matrix.json
+          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+
+  build-experimental:
+    needs: generate-experimental-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-experimental-matrix.outputs.matrix) }}
+    steps:
+      - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: version input is empty" >&2
+            exit 1
+          fi
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+            echo "ERROR: invalid version input: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Build static (${{ matrix.arch }}) binary
+        env:
+          IPERF_VERSION: ${{ inputs.version }}
+          ARCH: ${{ matrix.arch }}
+          AUTH: ${{ matrix.auth }}
+        run: |
+          set -euo pipefail
+          ./scripts/build-static.sh
+
+      - name: Upload experimental artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: experimental-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}
+          path: iperf3-*-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}.tar.gz
+          if-no-files-found: error
