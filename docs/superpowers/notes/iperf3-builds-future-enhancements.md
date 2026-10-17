@@ -6,7 +6,7 @@ Saved from user request. These items are planned for implementation.
 - [x] Migrate Linux static cross builds from third-party `userdocs/qbt-musl-cross-make` toolchains and `userdocs/openssl` prebuilts to the official Zig toolchain (`zig cc`) and OpenSSL built from upstream source.
 - [x] Scan release artifacts with authoritative multi-engine AV tools (VirusTotal + MetaDefender Cloud) and record results.
 - [x] Perform a security audit of the GitHub Actions workflow (trusted actions, pinned hashes, least-privilege permissions, supply-chain poisoning checks).
-- [ ] Reduce artifact retention period (e.g. 30 days) in GitHub Actions to avoid storing built artifacts twice.
+- [x] Reduce artifact retention period to 30 days in GitHub Actions to avoid storing built artifacts twice.
 - [ ] Add localized release notes (e.g. Russian/Chinese summary) alongside upstream English notes.
 - [x] Sign releases with Sigstore/cosign so users can verify archive integrity.
 - [ ] Publish a Docker/OCI image containing iperf3 in addition to tar archives.

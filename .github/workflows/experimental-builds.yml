@@ -85,3 +85,4 @@ jobs:
           name: experimental-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}
           path: iperf3-*-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
+          retention-days: 30

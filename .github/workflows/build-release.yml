@@ -85,6 +85,7 @@ jobs:
           name: release-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}
           path: iperf3-*-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
+          retention-days: 30
 
   build-dynamic:
     runs-on: ubuntu-latest
@@ -132,6 +133,7 @@ jobs:
           name: release-linux-x86_64-dynamic${{ matrix.auth && '-auth' || '' }}
           path: iperf3-build-dynamic${{ matrix.auth && '-auth' || '' }}/iperf3-*-linux-x86_64-dynamic${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
+          retention-days: 30
 
   build-macos-x86_64:
     runs-on: macos-26-intel
@@ -173,6 +175,7 @@ jobs:
           name: build-macos-x86_64${{ matrix.auth && '-auth' || '' }}
           path: macos-build-x86_64${{ matrix.auth && '-auth' || '' }}/*
           if-no-files-found: error
+          retention-days: 30
 
   build-macos-arm64:
     runs-on: macos-26
@@ -214,6 +217,7 @@ jobs:
           name: build-macos-arm64${{ matrix.auth && '-auth' || '' }}
           path: macos-build-arm64${{ matrix.auth && '-auth' || '' }}/*
           if-no-files-found: error
+          retention-days: 30
 
   package-macos-universal:
     needs: [build-macos-x86_64, build-macos-arm64]
@@ -253,6 +257,7 @@ jobs:
           name: release-macos-universal2${{ matrix.auth && '-auth' || '' }}
           path: iperf3-*-macos-universal2${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
+          retention-days: 30
 
   release:
     needs:
