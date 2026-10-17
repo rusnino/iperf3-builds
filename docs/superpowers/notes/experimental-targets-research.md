@@ -32,8 +32,24 @@ This file records feasibility findings for candidate Linux static targets before
 - `riscv32be`: No Linux/musl target.
 - `sparc`, `sparc64`, `alpha`, `hppa`, `hppa64`, `arc`, `csky`, `microblaze`, `or1k`, `sh4`, `xtensa`: Either no Linux/musl target in Zig 0.17.0 or no OpenSSL target; kept as future research only.
 
+## Local validation results (iperf3 3.22, Zig 0.17.0, OpenSSL 3.6.5)
+
+Builds run locally with `ARCH=<arch> IPERF_VERSION=3.22 ./scripts/build-static.sh`. Smoke tests run under the matching `qemu-*-static` user-mode emulator (`iperf3 --version`).
+
+| Target | Plain build | Auth build | ELF verification | QEMU smoke test | Notes |
+|---|---|---|---|---|---|
+| `ppc64` | pass | pass | pass | pass | `authentication` feature listed in `--version` for `-auth` archive. |
+| `riscv32` | pass | pass | pass | pass | `authentication` feature listed in `--version` for `-auth` archive. |
+| `armeb` | pass | n/a (auth disabled) | pass | pass | Plain-only due to missing OpenSSL big-endian ARM target. |
+| `mipsn32` | pass | n/a (auth disabled) | pass | pass | Plain-only due to missing OpenSSL n32 target. |
+| `mipsn32el` | pass | n/a (auth disabled) | pass | pass | Plain-only due to missing OpenSSL n32 target. |
+| `aarch64_be` | pass | n/a (auth disabled) | pass | pass | Plain-only due to missing OpenSSL big-endian AArch64 target. |
+| `hexagon` | pass | n/a (auth disabled) | pass | pass | Plain-only due to missing OpenSSL Hexagon target. |
+
+The GitHub Actions `experimental-builds.yml` workflow has not yet been triggered; it should be run for the next upstream release to confirm runner-side results match these local results.
+
 ## Next steps
 
-- Run the experimental workflow for `ppc64`, `riscv32`, `armeb`, `mipsn32`, `mipsn32el`, `aarch64_be`, `hexagon`.
-- If any target fails the plain build or smoke test, disable it in `targets.json` and document why.
-- If a target passes for two consecutive releases, consider promotion to `stable: true`.
+- Trigger `experimental-builds.yml` for the next iperf3 release to confirm runner results.
+- If runner results match local results for two consecutive releases, promote `ppc64` and `riscv32` to `stable: true`.
+- Re-evaluate `armeb`, `mipsn32`, `mipsn32el`, `aarch64_be`, and `hexagon` for auth support when a suitable OpenSSL Configure target is identified.

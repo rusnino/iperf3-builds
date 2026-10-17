@@ -40,3 +40,17 @@ Candidates to investigate in a separate experimental workflow before promotion t
 - Additional embedded Linux ISA (best effort, toolchain dependent): ARC, SuperH, MicroBlaze, OpenRISC, m68k, C-SKY, Xtensa.
 - Rare/specialized platforms (best effort): `aarch64_be`, `sparc`/`sparc64`, `alpha`, `hppa`/`parisc`, `x32`, `hexagon`, `powerpcspe`.
 - Other operating systems are a separate track: Windows, BSD, Android, etc.
+
+## Experimental target promotion criteria
+
+A target may be promoted from `experimental` to `stable` when:
+
+1. Plain and (if applicable) auth builds pass for at least two consecutive upstream releases.
+2. ELF verification passes for every built binary.
+3. QEMU user-mode smoke tests pass for every built binary.
+4. The README experimental table is updated to reflect `stable` status and any known issues.
+5. No open known issues affect runtime correctness.
+
+Promotion is a single catalog change: flip `"stable": false` to `"stable": true` in
+`targets.json` and update the README table.
+

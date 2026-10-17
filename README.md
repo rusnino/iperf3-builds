@@ -92,6 +92,26 @@ during the build.
 | `riscv64` | RV64GC (RISC-V 64-bit) | lp64 | little | none | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
 | `loongarch64` | LoongArch64 | sysv | little | none | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
 
+### Experimental Linux static targets
+
+The following targets are built only by the manually triggered
+`experimental-builds.yml` workflow. They are not published as release assets
+until they are promoted to stable.
+
+| Target | Status | Auth | ISA / CPU baseline | ABI | Endianness | Testing | Known issues |
+|---|---|---|---|---|---|---|---|
+| `ppc64` | experimental | yes | 64-bit PowerPC | ELFv1 | big | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `riscv32` | experimental | yes | RISC-V 32-bit | ilp32 | little | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `armeb` | experimental | no | ARM 32-bit big-endian | EABI soft-float | big | QEMU user-mode `--version` smoke test | no OpenSSL Configure target; plain-only |
+| `mipsn32` | experimental | no | MIPS64 n32 ABI | n32 soft-float | big | QEMU user-mode `--version` smoke test | no OpenSSL n32 ABI target; plain-only |
+| `mipsn32el` | experimental | no | MIPS64 n32 ABI | n32 soft-float | little | QEMU user-mode `--version` smoke test | no OpenSSL n32 ABI target; plain-only |
+| `aarch64_be` | experimental | no | ARM64 big-endian | sysv | big | QEMU user-mode `--version` smoke test | no OpenSSL Configure target; plain-only |
+| `hexagon` | experimental | no | Qualcomm Hexagon | sysv | little | QEMU user-mode `--version` smoke test | no OpenSSL Configure target; plain-only |
+
+Promotion to stable requires passing builds for at least two consecutive
+upstream releases, successful ELF verification, and documented QEMU smoke tests
+for all built variants.
+
 ### Other variants
 
 | Platform | Variant | libc / format | Best for | Notes |
