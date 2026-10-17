@@ -1,20 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build a statically-linked iperf3 binary using musl libc.
+# Build a statically-linked iperf3 binary using zig cc and musl libc.
 #
-# Supported ARCH values:
-#   x86_64, x86 (i686), aarch64, arm, armhf, armv7,
-#   mips, mipsel, mips64, mips64el,
-#   powerpc, ppc64le, s390x, riscv64, loongarch64
+# Supported ARCH values are defined in targets.json.
 #
 # Usage:
-#   IPERF_VERSION=3.17.1 ./build-static.sh
-#   ARCH=aarch64 IPERF_VERSION=3.17.1 ./build-static.sh
-#
-# Build with OpenSSL (RSA auth support):
-#   AUTH=true IPERF_VERSION=3.17.1 ./build-static.sh
-#   AUTH=true ARCH=aarch64 IPERF_VERSION=3.17.1 ./build-static.sh
+#   IPERF_VERSION=3.22 ./scripts/build-static.sh
+#   ARCH=aarch64 IPERF_VERSION=3.22 ./scripts/build-static.sh
+#   AUTH=true ARCH=aarch64 IPERF_VERSION=3.22 ./scripts/build-static.sh
 
 IPERF_VERSION="${IPERF_VERSION:-}"
 if [[ -z "$IPERF_VERSION" ]]; then
@@ -29,29 +23,55 @@ if [ "$AUTH" = "true" ]; then
   AUTH_SUFFIX="-auth"
 fi
 
-# Upstream iperf tags do not have a 'v' prefix (e.g. 3.22, 3.16-beta1).
 VERSION="$IPERF_VERSION"
 
-echo "=== Building static iperf3 ${VERSION} for ${ARCH}${AUTH_SUFFIX} ==="
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CATALOG="$REPO_ROOT/targets.json"
 
-# Save the repository root so we can place the final archive there.
-REPO_ROOT="$(pwd)"
-
-# Install build dependencies. Use sudo when not running as root (typical in
-# GitHub Actions runners).
-SUDO=""
-if [ "$(id -u)" -ne 0 ]; then
-  SUDO="sudo"
+if [ ! -f "$CATALOG" ]; then
+  echo "ERROR: targets catalog not found: $CATALOG" >&2
+  exit 1
 fi
 
+# Read target metadata from the catalog.
+python3 - "$CATALOG" "$ARCH" <<'PY' >/dev/null
+import sys, json
+catalog, arch = sys.argv[1], sys.argv[2]
+data = json.load(open(catalog))
+if arch not in data['arch']:
+    print(f"ERROR: unsupported ARCH: {arch}", file=sys.stderr)
+    sys.exit(1)
+PY
+
+ZIG_TARGET=$(python3 -c "import json; print(json.load(open('$CATALOG'))['arch']['$ARCH']['zig_target'])")
+OPENSSL_TARGET=$(python3 -c "import json; print(json.load(open('$CATALOG'))['arch']['$ARCH']['openssl_target'])")
+QEMU_BIN=$(python3 -c "import json; print(json.load(open('$CATALOG'))['arch']['$ARCH']['qemu'] or '')")
+
+if [ "$AUTH" = "true" ]; then
+  CATALOG_AUTH=$(python3 -c "import json; print(json.load(open('$CATALOG'))['arch']['$ARCH']['auth'])")
+  if [ "$CATALOG_AUTH" != "True" ]; then
+    echo "ERROR: auth is not supported for ARCH=$ARCH according to $CATALOG" >&2
+    exit 1
+  fi
+fi
+
+echo "=== Building static iperf3 ${VERSION} for ${ARCH}${AUTH_SUFFIX} (zig target: ${ZIG_TARGET}) ==="
+
+# Determine whether this is a native x86 build that can run without QEMU.
 NATIVE_ARCH=""
 if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "x86" ]; then
   NATIVE_ARCH=1
 fi
 
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+  SUDO="sudo"
+fi
+
 if command -v apt-get >/dev/null 2>&1; then
   echo "=== Installing dependencies via apt-get ==="
-  packages="build-essential musl-tools curl git autoconf automake libtool file xz-utils"
+  packages="build-essential curl git autoconf automake libtool file xz-utils python3"
   if [ -z "$NATIVE_ARCH" ]; then
     packages="$packages qemu-user-static"
   fi
@@ -59,131 +79,86 @@ if command -v apt-get >/dev/null 2>&1; then
   DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq $packages
 elif command -v apk >/dev/null 2>&1; then
   echo "=== Installing dependencies via apk ==="
-  apk add --no-cache build-base musl curl git autoconf automake libtool
+  packages="build-base curl git autoconf automake libtool file xz-utils python3"
   if [ -z "$NATIVE_ARCH" ]; then
-    apk add --no-cache qemu-user-static
+    packages="$packages qemu-user-static"
   fi
+  apk add --no-cache $packages
 else
   echo "ERROR: No supported package manager found" >&2
   exit 1
 fi
 
-# Select toolchain and configure host for cross builds.
-CROSS_BASE="${REPO_ROOT}/cross-toolchain"
-HOST=""
-CC=""
-QEMU_BIN=""
-TARGET=""
-case "$ARCH" in
-  x86_64)
-    TARGET="x86_64-linux-musl"
-    CC="musl-gcc"
-    ;;
-  x86)
-    TARGET="i686-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    ;;
-  aarch64)
-    TARGET="aarch64-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-aarch64-static"
-    ;;
-  arm)
-    TARGET="arm-linux-musleabi"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-arm-static"
-    ;;
-  armhf)
-    TARGET="armv6-linux-musleabihf"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-arm-static"
-    ;;
-  armv7)
-    TARGET="armv7l-linux-musleabihf"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-arm-static"
-    ;;
-  mips)
-    TARGET="mips-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-mips-static"
-    ;;
-  mipsel)
-    TARGET="mipsel-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-mipsel-static"
-    ;;
-  mips64)
-    TARGET="mips64-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-mips64-static"
-    ;;
-  mips64el)
-    TARGET="mips64el-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-mips64el-static"
-    ;;
-  powerpc)
-    TARGET="powerpc-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-ppc-static"
-    ;;
-  ppc64le)
-    TARGET="powerpc64le-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-ppc64le-static"
-    ;;
-  s390x)
-    TARGET="s390x-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-s390x-static"
-    ;;
-  riscv64)
-    TARGET="riscv64-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-riscv64-static"
-    ;;
-  loongarch64)
-    TARGET="loongarch64-linux-musl"
-    HOST="$TARGET"
-    CC="${CROSS_BASE}/${TARGET}/bin/${TARGET}-gcc"
-    QEMU_BIN="qemu-loongarch64-static"
-    ;;
-  *)
-    echo "ERROR: unsupported ARCH: ${ARCH}" >&2
-    exit 1
-    ;;
-esac
+# Install the official Zig toolchain.
+ZIG_VERSION="${ZIG_VERSION:-0.14.1}"
+ZIG_DIR="${ZIG_DIR:-$REPO_ROOT/.zig}"
+ZIG_BIN="$ZIG_DIR/zig"
 
-if [ -n "$HOST" ]; then
-  echo "=== Downloading musl cross toolchain for ${ARCH} ==="
-  MUSL_CROSS_VERSION="${MUSL_CROSS_VERSION:-2642}"
-  toolchain_filename="x86_64-${HOST}.tar.xz"
-  toolchain_url="https://github.com/userdocs/qbt-musl-cross-make/releases/download/${MUSL_CROSS_VERSION}/${toolchain_filename}"
-  rm -rf "$CROSS_BASE"
-  mkdir -p "$CROSS_BASE"
-  curl -fsSL --retry 5 --retry-delay 10 -o "/tmp/${toolchain_filename}" "$toolchain_url"
-  tar -xJf "/tmp/${toolchain_filename}" -C "$CROSS_BASE"
-  if [ ! -x "$CC" ]; then
-    echo "ERROR: cross compiler not found at ${CC}" >&2
-    exit 1
+ZIG_SHA256="${ZIG_SHA256:-}"
+
+if [ ! -x "$ZIG_BIN" ]; then
+  echo "=== Installing Zig ${ZIG_VERSION} ==="
+  rm -rf "$ZIG_DIR"
+  mkdir -p "$ZIG_DIR"
+  host_arch="$(uname -m)"
+  host_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+
+  case "${host_arch}-${host_os}" in
+    x86_64-linux) zig_tuple="x86_64-linux" ;;
+    aarch64-linux) zig_tuple="aarch64-linux" ;;
+    *) echo "ERROR: unsupported host for Zig install: ${host_arch}-${host_os}" >&2; exit 1 ;;
+  esac
+
+  zig_basename="zig-${zig_tuple}-${ZIG_VERSION}"
+  tarball="${zig_basename}.tar.xz"
+  url="https://ziglang.org/download/${ZIG_VERSION}/${tarball}"
+
+  curl -fsSL --retry 5 --retry-delay 10 -o "/tmp/${tarball}" "$url"
+
+  if [ -n "$ZIG_SHA256" ]; then
+    echo "$ZIG_SHA256  /tmp/${tarball}" | sha256sum -c -
   fi
+
+  tar -xJf "/tmp/${tarball}" -C "$ZIG_DIR" --strip-components=1
 fi
 
-# Clean up any previous build
+export PATH="$ZIG_DIR:$PATH"
+
+# Create wrapper scripts so that autotools and OpenSSL see plain cc/ar/ranlib.
+WRAPPER_DIR="$(mktemp -d)"
+trap 'rm -rf "$WRAPPER_DIR"' EXIT
+
+cat > "$WRAPPER_DIR/cc" <<EOF
+#!/usr/bin/env bash
+exec "$ZIG_BIN" cc -target "$ZIG_TARGET" "\$@"
+EOF
+chmod +x "$WRAPPER_DIR/cc"
+
+cat > "$WRAPPER_DIR/c++" <<EOF
+#!/usr/bin/env bash
+exec "$ZIG_BIN" c++ -target "$ZIG_TARGET" "\$@"
+EOF
+chmod +x "$WRAPPER_DIR/c++"
+
+cat > "$WRAPPER_DIR/ar" <<EOF
+#!/usr/bin/env bash
+exec "$ZIG_BIN" ar "\$@"
+EOF
+chmod +x "$WRAPPER_DIR/ar"
+
+cat > "$WRAPPER_DIR/ranlib" <<EOF
+#!/usr/bin/env bash
+exec "$ZIG_BIN" ranlib "\$@"
+EOF
+chmod +x "$WRAPPER_DIR/ranlib"
+
+export PATH="$WRAPPER_DIR:$PATH"
+export CC="$WRAPPER_DIR/cc"
+export CXX="$WRAPPER_DIR/c++"
+export AR="$WRAPPER_DIR/ar"
+export RANLIB="$WRAPPER_DIR/ranlib"
+
+# Clean up any previous build.
 BUILD_DIR="${REPO_ROOT}/iperf3-build-static-${ARCH}${AUTH_SUFFIX}"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -205,63 +180,82 @@ else
   cd "$BUILD_DIR"
 fi
 
-OPENSSL_DIR=""
+OPENSSL_PREFIX=""
 if [ "$AUTH" = "true" ]; then
-  echo "=== Downloading static OpenSSL for ${TARGET} ==="
-  OPENSSL_URL="https://github.com/userdocs/openssl/releases/latest/download/${TARGET}.tar.xz"
-  rm -f openssl-static.tar.xz
-  curl -fsSL --retry 5 --retry-delay 10 -o openssl-static.tar.xz "$OPENSSL_URL"
-  mkdir -p openssl-static
-  tar -xJf openssl-static.tar.xz -C openssl-static
-  OPENSSL_DIR="$(pwd)/openssl-static"
+  echo "=== Building OpenSSL from source for ${ARCH} ==="
+  OPENSSL_VERSION="${OPENSSL_VERSION:-3.6.5}"
+  openssl_tarball="openssl-${OPENSSL_VERSION}.tar.gz"
+  openssl_url="https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/${openssl_tarball}"
+  rm -f "$openssl_tarball"
+  curl -fsSL --retry 5 --retry-delay 10 -o "$openssl_tarball" "$openssl_url"
+  tar -xzf "$openssl_tarball"
+  cd "openssl-${OPENSSL_VERSION}"
+
+  OPENSSL_PREFIX="$(pwd)/../openssl-prefix"
+  rm -rf "$OPENSSL_PREFIX"
+  mkdir -p "$OPENSSL_PREFIX"
+
+  ./Configure \
+    "$OPENSSL_TARGET" \
+    --prefix="$OPENSSL_PREFIX" \
+    --openssldir="$OPENSSL_PREFIX/ssl" \
+    no-shared \
+    no-zlib \
+    -static \
+    -DOPENSSL_NO_AFALGENG \
+    threads
+
+  make -j"$(nproc)"
+  make install_sw
+  cd "$BUILD_DIR"
 fi
 
 cd "${SRC_DIR}"
 
 echo "=== Configuring static build ==="
-# GCC 14+/16 treats some older iperf3 callback signatures as incompatible
-# pointer types. Demote that specific diagnostic to a warning so legacy
-# versions still build cleanly.
+# Demote incompatible-pointer-types to a warning so older iperf3 versions still build.
 CFLAGS="-static -Wno-error=incompatible-pointer-types"
 
 configure_flags=(--disable-shared --enable-static-bin)
-if [ -n "${OPENSSL_DIR:-}" ]; then
-  configure_flags+=(--with-openssl="$OPENSSL_DIR")
+if [ -n "$OPENSSL_PREFIX" ]; then
+  configure_flags+=(--with-openssl="$OPENSSL_PREFIX")
 else
   configure_flags+=(--without-openssl)
 fi
 
-if [ -n "$HOST" ]; then
-  ./configure CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="-static" --host="$HOST" "${configure_flags[@]}"
-else
-  ./configure CC="$CC" CFLAGS="$CFLAGS" LDFLAGS="-static" "${configure_flags[@]}"
-fi
+./configure \
+  CC="$CC" \
+  CFLAGS="$CFLAGS" \
+  LDFLAGS="-static" \
+  --host="$ZIG_TARGET" \
+  "${configure_flags[@]}"
 
 echo "=== Building ==="
 make -j"$(nproc)"
 
-echo "=== Verifying static linkage ==="
+echo "=== Verifying binary ==="
 if [ ! -f src/iperf3 ]; then
   echo "ERROR: iperf3 binary not found" >&2
   exit 1
 fi
 
-file_info=$(file src/iperf3)
-echo "$file_info"
+file src/iperf3
+"$REPO_ROOT/scripts/verify-elf.sh" src/iperf3 "$ARCH"
 
-if readelf -d src/iperf3 2>/dev/null | grep -q 'NEEDED'; then
-  echo "ERROR: binary is not statically linked" >&2
-  exit 1
+if [ "$AUTH" = "true" ]; then
+  echo "=== Verifying authentication feature ==="
+  if ! src/iperf3 --version 2>/dev/null | grep -q 'authentication'; then
+    echo "ERROR: auth binary does not report authentication support" >&2
+    exit 1
+  fi
+  echo "OK: authentication feature present"
 fi
-echo "OK: binary is statically linked"
 
-# Package the binary
+# Package the binary.
 cd "$BUILD_DIR"
 OUTPUT_DIR="iperf3-${VERSION}-linux-${ARCH}-static${AUTH_SUFFIX}"
 mkdir -p "$OUTPUT_DIR"
 cp "${SRC_DIR}/src/iperf3" "$OUTPUT_DIR/iperf3"
-
-# Copy license and add a small README
 cp "${SRC_DIR}/LICENSE" "$OUTPUT_DIR/LICENSE"
 
 if [ "$AUTH" = "true" ]; then
@@ -270,14 +264,41 @@ else
   auth_note="These builds do not include OpenSSL, so iperf3's RSA authentication feature is not available."
 fi
 
+# Include a manifest with provenance and compatibility metadata.
+MANIFEST="$OUTPUT_DIR/MANIFEST.json"
+python3 - "$CATALOG" "$ARCH" "$VERSION" "$ZIG_VERSION" "$AUTH" "$auth_note" <<'PY' > "$MANIFEST"
+import sys, json
+
+catalog_path, arch, iperf_version, zig_version, auth, auth_note = sys.argv[1:7]
+data = json.load(open(catalog_path))
+meta = data['arch'][arch]
+manifest = {
+    'iperf_version': iperf_version,
+    'target_name': arch,
+    'zig_target': meta['zig_target'],
+    'zig_version': zig_version,
+    'openssl_version': '3.6.5' if auth == 'true' else None,
+    'cpu_baseline': meta.get('cpu'),
+    'abi': meta.get('abi'),
+    'endianness': meta.get('endianness'),
+    'auth': auth == 'true',
+    'auth_note': auth_note,
+    'libc': 'musl (via zig cc)',
+    'build_type': 'static',
+}
+print(json.dumps(manifest, indent=2))
+PY
+
 cat > "$OUTPUT_DIR/README.md" <<EOF
 # iperf3 ${VERSION} — static build for Linux ${ARCH}${AUTH_SUFFIX}
 
-This is a statically-linked build of iperf3 compiled with musl libc.
+This is a statically-linked build of iperf3 compiled with zig cc and musl libc.
 It should run on most Linux ${ARCH} distributions without installing
 additional libraries.
 
 ${auth_note}
+
+See MANIFEST.json for provenance and compatibility metadata.
 
 ## Usage
 
