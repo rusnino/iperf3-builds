@@ -66,42 +66,38 @@ tar -xzf iperf3-${VERSION}-linux-x86_64-static.tar.gz
 ./iperf3-${VERSION}-linux-x86_64-static/iperf3 --version
 ```
 
-## Build variants
+## Supported Linux static targets
+
+All Linux static builds are cross-compiled with the official [Zig](https://ziglang.org/)
+toolchain (`zig cc`) and statically linked against musl libc.  `-auth` variants include
+OpenSSL built from upstream source.  Every archive contains a `MANIFEST.json` with the
+exact target triple, CPU/ABI metadata, compiler versions, and smoke-test status used
+during the build.
+
+| Target | ISA / CPU baseline | ABI | Endianness | FPU requirements | Auth | Testing | Limitations |
+|---|---|---|---|---|---|---|---|
+| `x86_64` | x86-64 | sysv | little | none | yes | native `--version` smoke test | none |
+| `x86` | i686-class (x86 baseline) | sysv | little | x87 FPU or soft-float emulation | yes | runs natively on x86_64 host | intended for real 32-bit x86 systems |
+| `aarch64` | ARMv8-A 64-bit | sysv | little | none | yes | QEMU user-mode `--version` smoke test | user-mode emulation only; not a real-device kernel/performance test |
+| `arm` | ARMv5 / ARMv4T-compatible | EABI soft-float | little | none (soft-float) | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `armhf` | ARMv6 hard-float | EABI hard-float (VFP) | little | VFP | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `armv7` | ARMv7 hard-float | EABI hard-float (VFPv3) | little | VFPv3 | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `mips` | MIPS32 | o32 soft-float (musleabi) | big | none (soft-float) | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `mipsel` | MIPS32 | o32 soft-float (musleabi) | little | none (soft-float) | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `mips64` | MIPS64 | n64 soft-float (muslabi64) | big | none (soft-float) | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `mips64el` | MIPS64 | n64 soft-float (muslabi64) | little | none (soft-float) | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `powerpc` | 32-bit PowerPC | sysv soft-float (musleabi) | big | none (soft-float) | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `ppc64le` | PowerPC64 little-endian | ELFv2 | little | none | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `s390x` | IBM z/Architecture | sysv | big | none | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `riscv64` | RV64GC (RISC-V 64-bit) | lp64 | little | none | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `loongarch64` | LoongArch64 | sysv | little | none | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+
+### Other variants
 
 | Platform | Variant | libc / format | Best for | Notes |
 |---|---|---|---|---|
-| Linux x86_64 | static | musl | Maximum portability | No runtime dependencies |
-| Linux x86_64 | static-auth | musl + OpenSSL | Maximum portability + RSA auth | No runtime dependencies |
 | Linux x86_64 | dynamic | glibc 2.28 | CentOS Stream 8 / RHEL 8 / AlmaLinux 8 targets | Smaller, but needs compatible glibc |
 | Linux x86_64 | dynamic-auth | glibc 2.28 + OpenSSL | glibc targets + RSA auth | Static OpenSSL; still needs compatible glibc |
-| Linux aarch64 | static | musl | ARM64 servers and SBCs | Cross-compiled, smoke-tested with QEMU |
-| Linux aarch64 | static-auth | musl + OpenSSL | ARM64 servers and SBCs + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux x86 | static | musl | 32-bit x86 systems / containers | Cross-compiled from x86_64; runs natively on x86_64 |
-| Linux x86 | static-auth | musl + OpenSSL | 32-bit x86 + RSA auth | Cross-compiled from x86_64; runs natively on x86_64 |
-| Linux arm | static | musl | ARMv5 soft-float boards | Cross-compiled, smoke-tested with QEMU |
-| Linux arm | static-auth | musl + OpenSSL | ARMv5 soft-float boards + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux armhf | static | musl | ARMv6 hard-float boards | Cross-compiled, smoke-tested with QEMU |
-| Linux armhf | static-auth | musl + OpenSSL | ARMv6 hard-float boards + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux armv7 | static | musl | ARMv7 hard-float boards | Cross-compiled, smoke-tested with QEMU |
-| Linux armv7 | static-auth | musl + OpenSSL | ARMv7 hard-float boards + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux mips | static | musl | MIPS 32-bit big-endian | Cross-compiled, smoke-tested with QEMU |
-| Linux mips | static-auth | musl + OpenSSL | MIPS 32-bit big-endian + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux mipsel | static | musl | MIPS 32-bit little-endian | Cross-compiled, smoke-tested with QEMU |
-| Linux mipsel | static-auth | musl + OpenSSL | MIPS 32-bit little-endian + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux mips64 | static | musl | MIPS 64-bit big-endian | Cross-compiled, smoke-tested with QEMU |
-| Linux mips64 | static-auth | musl + OpenSSL | MIPS 64-bit big-endian + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux mips64el | static | musl | MIPS 64-bit little-endian | Cross-compiled, smoke-tested with QEMU |
-| Linux mips64el | static-auth | musl + OpenSSL | MIPS 64-bit little-endian + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux powerpc | static | musl | 32-bit PowerPC | Cross-compiled, smoke-tested with QEMU |
-| Linux powerpc | static-auth | musl + OpenSSL | 32-bit PowerPC + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux ppc64le | static | musl | 64-bit little-endian PowerPC | Cross-compiled, smoke-tested with QEMU |
-| Linux ppc64le | static-auth | musl + OpenSSL | 64-bit little-endian PowerPC + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux s390x | static | musl | IBM Z / s390x | Cross-compiled, smoke-tested with QEMU |
-| Linux s390x | static-auth | musl + OpenSSL | IBM Z / s390x + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux riscv64 | static | musl | RISC-V 64-bit | Cross-compiled, smoke-tested with QEMU |
-| Linux riscv64 | static-auth | musl + OpenSSL | RISC-V 64-bit + RSA auth | Cross-compiled, smoke-tested with QEMU |
-| Linux loongarch64 | static | musl | LoongArch 64-bit | Cross-compiled, smoke-tested with QEMU |
-| Linux loongarch64 | static-auth | musl + OpenSSL | LoongArch 64-bit + RSA auth | Cross-compiled, smoke-tested with QEMU |
 | macOS | universal2 | system libs | Intel and Apple Silicon Macs | Requires macOS 11.0+; ad-hoc signed, not notarized |
 | macOS | universal2-auth | system libs + OpenSSL | Intel and Apple Silicon Macs + RSA auth | Requires macOS 11.0+; ad-hoc signed, not notarized |
 

@@ -3,6 +3,7 @@
 Saved from user request. These items are planned for implementation.
 
 - [x] Add `-auth` builds with OpenSSL so RSA authentication works.
+- [x] Migrate Linux static cross builds from third-party `userdocs/qbt-musl-cross-make` toolchains and `userdocs/openssl` prebuilts to the official Zig toolchain (`zig cc`) and OpenSSL built from upstream source.
 - [ ] Reduce artifact retention period (e.g. 30 days) in GitHub Actions to avoid storing built artifacts twice.
 - [ ] Add localized release notes (e.g. Russian/Chinese summary) alongside upstream English notes.
 - [ ] Sign releases with Sigstore/cosign (or GPG) so users can verify archive integrity.
@@ -20,15 +21,20 @@ Saved from user request. These items are planned for implementation.
 - macOS Apple Silicon (arm64 / M1/M2/M3) (done)
 - Other Unix/BSD-like systems (non-Windows): FreeBSD, OpenBSD, NetBSD, Solaris/illumos (backlog)
 
-## Expanded platform matrix (matching `userdocs/iperf3-static`)
-
-Goal: support the same breadth of targets.
+## Stable Linux static platform matrix
 
 - [x] **Linux:** `aarch64`, `arm`, `armhf`, `armv7`, `x86`, `x86_64`, `mips`, `mipsel`, `mips64`, `mips64el`, `powerpc`, `ppc64le`, `s390x`, `riscv64`, `loongarch64`
-- [ ] **Windows:** `x86_64` (Cygwin-based static build)
 - [x] **macOS:** `x86_64`, `arm64` (universal2)
 
 Notes:
-- Requires prebuilt OpenSSL for every Linux cross target.
-- Windows build needs a Cygwin installer/setup step on a Windows runner.
-- More architectures = longer CI queues; consider `fail-fast: false` and artifact-only dispatch option.
+- Linux static builds use `zig cc` and musl libc; OpenSSL for `-auth` variants is built from upstream source for each target.
+- Target metadata is stored in `targets.json` and consumed by both `scripts/build-static.sh` and the GitHub Actions matrix generator.
+
+## Experimental / expansion candidates
+
+Candidates to investigate in a separate experimental workflow before promotion to stable:
+
+- Missing endian/ABI variants of existing families: `armeb`, `ppc64` (big-endian), `riscv32`, MIPS n32 BE/LE.
+- Additional embedded Linux ISA (best effort, toolchain dependent): ARC, SuperH, MicroBlaze, OpenRISC, m68k, C-SKY, Xtensa.
+- Rare/specialized platforms (best effort): `aarch64_be`, `sparc`/`sparc64`, `alpha`, `hppa`/`parisc`, `x32`, `hexagon`, `powerpcspe`.
+- Other operating systems are a separate track: Windows, BSD, Android, etc.
