@@ -29,7 +29,7 @@ jobs:
         id: set
         run: |
           set -euo pipefail
-          python3 - <<'PY'
+          python3 - <<'PY' > matrix.json
           import json
           data = json.load(open('targets.json'))
           matrix = {'include': []}
@@ -40,7 +40,7 @@ jobs:
               if meta.get('auth', True):
                   matrix['include'].append({'arch': arch, 'auth': True})
           print(json.dumps(matrix))
-          PY > matrix.json
+          PY
           echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
 
   build-linux-static:
