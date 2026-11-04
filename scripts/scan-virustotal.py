@@ -22,8 +22,24 @@ import urllib.error
 
 VT_API_KEY = os.environ.get("VT_API_KEY", "")
 METADEFENDER_API_KEY = os.environ.get("METADEFENDER_API_KEY", "")
+VERSION = os.environ.get("VERSION", "")
+WORKFLOW_REF = os.environ.get("WORKFLOW_REF", "")
 VT_SLEEP_SECONDS = 15  # public free-tier limit is 4 lookups/minute
 METADEFENDER_SLEEP_SECONDS = 1
+
+
+def _signature_identity() -> str:
+    """Expected cosign certificate identity for this release.
+
+    Signature subjects are workflow files, not tags, so the identity is the
+    exact `build-release.yml` ref that produced the artifacts.
+    """
+    if WORKFLOW_REF:
+        return WORKFLOW_REF
+    return ""
+
+
+SIGNATURE_IDENTITY = _signature_identity()
 
 
 def _now() -> str:
@@ -246,6 +262,7 @@ def scan_manifest(manifest_path: Path, output_dir: Path) -> Path:
                 "basename": item["basename"],
                 "sha256": sha256,
                 "size": item["size"],
+                "status": _artifact_status(vt_result, md_result),
                 "virustotal": vt_result,
                 "metadefender": md_result,
             }
@@ -253,6 +270,8 @@ def scan_manifest(manifest_path: Path, output_dir: Path) -> Path:
 
     report = {
         "generated_at": _now(),
+        "version": VERSION,
+        "signature_identity": SIGNATURE_IDENTITY,
         "scanners": {
             "virustotal": {"configured": bool(VT_API_KEY)},
             "metadefender": {"configured": bool(METADEFENDER_API_KEY)},
@@ -264,7 +283,21 @@ def scan_manifest(manifest_path: Path, output_dir: Path) -> Path:
     md_path = output_dir / "scan-report.md"
     json_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     md_path.write_text(_render_markdown(report), encoding="utf-8")
+    _summarise(results)
     return json_path
+
+
+def _artifact_status(vt: dict, md: dict) -> str:
+    for result in (vt, md):
+        if result.get("status") == "error":
+            return "scanner-error"
+    for result in (vt, md):
+        if result.get("status") == "timeout":
+            return "scanner-timeout"
+    if all(result.get("status") == "skipped" for result in (vt, md)):
+        return "not-scanned"
+    detected = vt.get("malicious", 0) + vt.get("suspicious", 0) + md.get("total_detected", 0)
+    return "detected" if detected > 0 else "clean"
 
 
 def _render_markdown(report: dict) -> str:
@@ -280,8 +313,8 @@ def _render_markdown(report: dict) -> str:
         "",
         "## Results",
         "",
-        "| File | SHA-256 | Size | VirusTotal | MetaDefender |",
-        "|---|---|---:|---|---|",
+        "| File | SHA-256 | Size | VirusTotal | MetaDefender | Status |",
+        "|---|---|---:|---|---|---|",
     ]
 
     for f in report["files"]:
@@ -289,7 +322,27 @@ def _render_markdown(report: dict) -> str:
         md = f["metadefender"]
         vt_cell = _fmt_vt(vt)
         md_cell = _fmt_md(md)
-        lines.append(f"| {f['basename']} | `{f['sha256']}` | {f['size']} | {vt_cell} | {md_cell} |")
+        lines.append(
+            f"| {f['basename']} | `{f['sha256']}` | {f['size']} | {vt_cell} | {md_cell} | {f.get('status', 'unknown')} |"
+        )
+
+    if report.get("version"):
+        lines.extend(["", "## Verification", ""])
+        identity = report.get("signature_identity") or ""
+        archive = report["files"][0]["basename"] if report["files"] else "<archive>.tar.gz"
+        lines.append("Each archive is signed with Sigstore/cosign in keyless mode. Verify with:")
+        lines.append("")
+        lines.append("```bash")
+        lines.append("cosign verify-blob \\")
+        lines.append(f"  --signature {archive}.sig \\")
+        lines.append(f"  --certificate {archive}.cert \\")
+        lines.append("  --certificate-oidc-issuer https://token.actions.githubusercontent.com \\")
+        if identity:
+            lines.append(f"  --certificate-identity '{identity}' \\")
+        else:
+            lines.append("  --certificate-identity-regexp '<workflow identity from the certificate>' \\")
+        lines.append(f"  {archive}")
+        lines.append("```")
 
     lines.extend(
         [
@@ -307,26 +360,41 @@ def _render_markdown(report: dict) -> str:
         lines.append(f"- MetaDefender: {json.dumps(f['metadefender'], indent=2)}")
         lines.append("")
 
-    flagged = [
-        f
-        for f in report["files"]
-        if f["virustotal"].get("malicious", 0) > 0
-        or f["virustotal"].get("suspicious", 0) > 0
-        or f["metadefender"].get("total_detected", 0) > 0
-    ]
+    flagged = [f for f in report["files"] if f.get("status") == "detected"]
+    failed = [f for f in report["files"] if f.get("status") in ("scanner-error", "scanner-timeout")]
     if flagged:
         lines.append("## ⚠️ Flagged artifacts")
         lines.append("")
         for f in flagged:
             lines.append(f"- {f['basename']} — review the detailed scanner output above.")
         lines.append("")
-    else:
+    if failed:
+        lines.append("## Scanner errors")
+        lines.append("")
+        for f in failed:
+            lines.append(f"- {f['basename']} — {f['status']}: a scanner did not return a result.")
+        lines.append("")
+    if not flagged and not failed:
         lines.append("## Summary")
         lines.append("")
-        lines.append("No scanner reported malicious or suspicious detections.")
+        unscanned = [f for f in report["files"] if f.get("status") == "not-scanned"]
+        if unscanned:
+            lines.append(
+                f"⚠️ {len(unscanned)} of {len(report['files'])} artifacts were not scanned by any engine "
+                "(scanner API keys missing or invalid). Treat the report as incomplete."
+            )
+        else:
+            lines.append("All artifacts were scanned and no scanner reported malicious or suspicious detections.")
         lines.append("")
 
     return "\n".join(lines) + "\n"
+
+
+def _summarise(results: list) -> None:
+    counts: dict = {}
+    for item in results:
+        counts[item["status"]] = counts.get(item["status"], 0) + 1
+    print("Scan summary: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())), file=sys.stderr)
 
 
 def _fmt_vt(vt: dict) -> str:
@@ -347,6 +415,8 @@ def _fmt_md(md: dict) -> str:
         return f"skipped ({md.get('reason', 'no key')})"
     if md.get("status") == "error":
         return f"error (HTTP {md.get('http_status', 'N/A')})"
+    if md.get("status") == "timeout":
+        return "timeout"
     total = md.get("total_avs", 0)
     detected = md.get("total_detected", 0)
     return f"{detected}/{total} detected (MetaDefender)"

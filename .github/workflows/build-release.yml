@@ -29,19 +29,8 @@ jobs:
         id: set
         run: |
           set -euo pipefail
-          python3 - <<'PY' > matrix.json
-          import json
-          data = json.load(open('targets.json'))
-          matrix = {'include': []}
-          for arch, meta in data['arch'].items():
-              if not meta.get('stable', False):
-                  continue
-              matrix['include'].append({'arch': arch, 'auth': False})
-              if meta.get('auth', True):
-                  matrix['include'].append({'arch': arch, 'auth': True})
-          print(json.dumps(matrix))
-          PY
-          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+          matrix=$(python3 scripts/matrix/stable.py targets.json)
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
 
   build-linux-static:
     needs: generate-linux-static-matrix
@@ -78,6 +67,21 @@ jobs:
         run: |
           set -euo pipefail
           ./scripts/build-static.sh
+
+      - name: Smoke test (${{ matrix.arch }}${{ matrix.auth && ' -auth' || '' }})
+        env:
+          ARCH: ${{ matrix.arch }}
+          AUTH: ${{ matrix.auth }}
+        run: |
+          set -euo pipefail
+          suffix=""
+          if [ "$AUTH" = "true" ]; then
+            suffix="-auth"
+          fi
+          workdir="$(mktemp -d)"
+          archive="$(ls "iperf3-"*"-linux-${ARCH}-static${suffix}.tar.gz" | head -n1)"
+          tar -xzf "$archive" -C "$workdir"
+          ./scripts/smoke-test.sh "$ARCH" "${workdir}/${archive%.tar.gz}/iperf3"
 
       - name: Upload static artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -348,7 +352,7 @@ jobs:
           fi
 
   scan-release-artifacts:
-    needs: release
+    needs: [release, sign-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -384,6 +388,8 @@ jobs:
         env:
           VT_API_KEY: ${{ secrets.VT_API_KEY }}
           METADEFENDER_API_KEY: ${{ secrets.METADEFENDER_API_KEY }}
+          VERSION: ${{ inputs.version }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
           ./scripts/scan-artifacts.sh artifacts

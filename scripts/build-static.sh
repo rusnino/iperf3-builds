@@ -46,7 +46,6 @@ PY
 
 ZIG_TARGET=$(python3 -c "import json; print(json.load(open('$CATALOG'))['arch']['$ARCH']['zig_target'])")
 OPENSSL_TARGET=$(python3 -c "import json; print(json.load(open('$CATALOG'))['arch']['$ARCH']['openssl_target'])")
-QEMU_BIN=$(python3 -c "import json; print(json.load(open('$CATALOG'))['arch']['$ARCH']['qemu'] or '')")
 
 if [ "$AUTH" = "true" ]; then
   CATALOG_AUTH=$(python3 -c "import json; print(json.load(open('$CATALOG'))['arch']['$ARCH']['auth'])")
@@ -345,15 +344,7 @@ cp "$ARCHIVE" "$REPO_ROOT/"
 echo "=== Smoke test ==="
 cd "$REPO_ROOT"
 tar -xzf "$ARCHIVE"
-if [ -n "$NATIVE_ARCH" ]; then
-  "${OUTPUT_DIR}/iperf3" --version
-else
-  if [ -z "${QEMU_BIN:-}" ]; then
-    echo "ERROR: QEMU binary not configured for ${ARCH}" >&2
-    exit 1
-  fi
-  "$QEMU_BIN" "${OUTPUT_DIR}/iperf3" --version
-fi
+"$REPO_ROOT/scripts/smoke-test.sh" "$ARCH" "${OUTPUT_DIR}/iperf3"
 
 echo "=== Built: ${REPO_ROOT}/${ARCHIVE} ==="
 ls -lh "$ARCHIVE"

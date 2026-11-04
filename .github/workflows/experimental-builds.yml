@@ -29,19 +29,8 @@ jobs:
         id: set
         run: |
           set -euo pipefail
-          python3 - <<'PY' > matrix.json
-          import json
-          data = json.load(open('targets.json'))
-          matrix = {'include': []}
-          for arch, meta in data['arch'].items():
-              if meta.get('stable', True):
-                  continue
-              matrix['include'].append({'arch': arch, 'auth': False})
-              if meta.get('auth', True):
-                  matrix['include'].append({'arch': arch, 'auth': True})
-          print(json.dumps(matrix))
-          PY
-          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+          matrix=$(python3 scripts/matrix/experimental.py targets.json)
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
 
   build-experimental:
     needs: generate-experimental-matrix
@@ -70,6 +59,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
+      - name: Install QEMU user-mode emulators
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq binfmt-support qemu-user-static
+
       - name: Build static (${{ matrix.arch }}) binary
         env:
           IPERF_VERSION: ${{ inputs.version }}
@@ -78,6 +73,21 @@ jobs:
         run: |
           set -euo pipefail
           ./scripts/build-static.sh
+
+      - name: Smoke test (${{ matrix.arch }}${{ matrix.auth && ' -auth' || '' }})
+        env:
+          ARCH: ${{ matrix.arch }}
+          AUTH: ${{ matrix.auth }}
+        run: |
+          set -euo pipefail
+          suffix=""
+          if [ "$AUTH" = "true" ]; then
+            suffix="-auth"
+          fi
+          workdir="$(mktemp -d)"
+          archive="$(ls "iperf3-"*"-linux-${ARCH}-static${suffix}.tar.gz" | head -n1)"
+          tar -xzf "$archive" -C "$workdir"
+          ./scripts/smoke-test.sh "$ARCH" "${workdir}/${archive%.tar.gz}/iperf3"
 
       - name: Upload experimental artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

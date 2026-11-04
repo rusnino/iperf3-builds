@@ -35,16 +35,27 @@ upstream iperf3 source.
 
 ## Antivirus scanning
 
-After each release, the `scan-release-artifacts` job submits every archive to at
-least two independent scanners:
+After each release, the `scan-release-artifacts` job submits every published
+archive to two independent, multi-engine services:
 
 - **VirusTotal** (primary) — hash/file lookup and submission via VirusTotal API v3.
-- **MetaDefender Cloud** (secondary) — hash lookup via MetaDefender Cloud API v4.
+- **MetaDefender Cloud** (secondary) — hash lookup, falling back to uploading the
+  file for scanning via MetaDefender Cloud API v4.
 
 Results are stored in `scan-report.json` and a human-readable `scan-report.md`,
-both of which are uploaded back to the GitHub release. Scan jobs run *after*
-release creation, so a brief window exists where assets are public before the
-report is attached; this window is documented in the release notes.
+both of which are uploaded back to the GitHub release. Every archive row carries
+a `status`:
+
+- `clean` — at least one engine scanned the file and nothing was flagged;
+- `detected` — at least one engine flagged the file;
+- `scanner-error` / `scanner-timeout` — a scanner returned an error or did not
+  finish;
+- `not-scanned` — neither scanner could run (missing/invalid API keys). The
+  report summary states explicitly how many artifacts were not scanned.
+
+Scan jobs run *after* release creation, so a brief window exists where assets
+are public before the report is attached; this window is documented in the
+release notes.
 
 If you find an engine flagging a release archive, please open a security issue
 (see below) and include the scanner report and file hash.
@@ -53,21 +64,39 @@ If you find an engine flagging a release archive, please open a security issue
 
 Release archives are signed with [Sigstore/cosign](https://www.sigstore.dev/) in
 keyless mode from the GitHub Actions workflow. Each archive has a matching
-`.sig` and `.cert` file attached to the release.
-
-Install `cosign` and verify a downloaded archive:
+`.sig` and `.cert` file attached to the release. The certificate subject is the
+workflow that built the release (`build-release.yml`), not a tag, so use
+`--certificate-identity` with the exact ref used for the build:
 
 ```bash
+# Releases built from the default branch:
+IDENTITY="https://github.com/rusnino/iperf3-builds/.github/workflows/build-release.yml@refs/heads/main"
+
+# Releases built while testing a feature branch:
+# IDENTITY="https://github.com/rusnino/iperf3-builds/.github/workflows/build-release.yml@refs/heads/<branch>"
+
 cosign verify-blob \
   --signature iperf3-3.22-linux-x86_64-static.tar.gz.sig \
   --certificate iperf3-3.22-linux-x86_64-static.tar.gz.cert \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github.com/rusnino/iperf3-builds/.github/workflows/build-release.yml@refs/tags/' \
+  --certificate-identity "${IDENTITY}" \
   iperf3-3.22-linux-x86_64-static.tar.gz
 ```
 
-The `--certificate-identity-regexp` expects the issuer to be the
-`build-release.yml` workflow running from a tag push or workflow dispatch.
+To discover the identity without guessing, inspect the certificate subject:
+
+```bash
+cosign verify-blob --certificate <archive>.cert --signature <archive>.sig <archive>
+```
+
+If you only want to ensure the signature came from this repository's workflow
+at *any* ref, use `--certificate-identity-regexp` with a `.*` suffix:
+
+```bash
+--certificate-identity-regexp '^https://github\.com/rusnino/iperf3-builds/\.github/workflows/build-release\.yml@.*'
+```
+
+The same command is embedded in every release's `scan-report.md`.
 
 ## Reporting security issues
 

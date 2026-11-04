@@ -49,8 +49,10 @@ archives.
 
 Each release also includes `scan-report.json` and `scan-report.md` from
 antivirus scanning (VirusTotal + MetaDefender Cloud) and `.sig`/`.cert` files
-for Sigstore/cosign keyless signature verification. See `SECURITY.md` for
-details.
+for Sigstore/cosign keyless signature verification. Every archive row in the
+scan report has a `status` (`clean`, `detected`, `scanner-error`,
+`scanner-timeout`, or `not-scanned`) so an incomplete scan is visible at a
+glance. See `SECURITY.md` for verification details.
 
 > **Note:** Assets without `-auth` do not include OpenSSL, so iperf3's RSA
 > authentication feature is not available. Use the `-auth` archives when you
@@ -78,6 +80,11 @@ toolchain (`zig cc`) and statically linked against musl libc.  `-auth` variants 
 OpenSSL built from upstream source.  Every archive contains a `MANIFEST.json` with the
 exact target triple, CPU/ABI metadata, compiler versions, and smoke-test status used
 during the build.
+
+Every archive is smoke-tested in CI before it is uploaded: binaries for the build
+host architecture run natively, everything else runs under QEMU user-mode
+emulation (`./scripts/smoke-test.sh <arch> <binary>`). A target whose emulator is
+missing fails the build instead of silently skipping the test.
 
 | Target | ISA / CPU baseline | ABI | Endianness | FPU requirements | Auth | Testing | Limitations |
 |---|---|---|---|---|---|---|---|
