@@ -50,8 +50,10 @@ a `status`:
 - `detected` — at least one engine flagged the file;
 - `scanner-error` / `scanner-timeout` — a scanner returned an error or did not
   finish;
-- `not-scanned` — neither scanner could run (missing/invalid API keys). The
-  report summary states explicitly how many artifacts were not scanned.
+- `not-scanned` — neither scanner could run (missing/invalid API keys);
+- `indeterminate` — the scanners answered but no engine produced a verdict yet.
+  The report summary states explicitly how many artifacts fall into the
+  `not-scanned` and `indeterminate` groups.
 
 Scan jobs run *after* release creation, so a brief window exists where assets
 are public before the report is attached; this window is documented in the

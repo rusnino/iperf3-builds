@@ -169,6 +169,23 @@ def _virustotal_poll_analysis(analysis_id: str, attempts: int = 10, interval: in
     return {"status": "timeout", "method": "upload", "analysis_id": analysis_id}
 
 
+def _metadefender_result(scan_results: dict, payload: dict) -> dict:
+    return {
+        "status": "completed",
+        "total_avs": int(scan_results.get("total_avs", 0)),
+        "total_detected": int(scan_results.get("total_detected", 0)),
+        "scan_all_result_a": scan_results.get("scan_all_result_a", ""),
+        "permalink": payload.get("data", {}).get("permalink", "") or payload.get("permalink", ""),
+    }
+
+
+def _metadefender_done(scan_results: dict) -> bool:
+    # MetaDefender reports scan_all_result_a for queued/in-progress scans too
+    # ("In Progress"), with total_avs == 0. Only trust a finished verdict.
+    verdict = str(scan_results.get("scan_all_result_a", ""))
+    return int(scan_results.get("total_avs", 0)) > 0 and verdict not in ("", "In Progress")
+
+
 def metadefender_scan(file_path: Path, sha256: str) -> dict:
     if not METADEFENDER_API_KEY:
         return {"status": "skipped", "reason": "METADEFENDER_API_KEY not configured"}
@@ -179,14 +196,11 @@ def metadefender_scan(file_path: Path, sha256: str) -> dict:
 
     if status == 200 and isinstance(payload, dict):
         scan_results = payload.get("scan_results", {})
-        return {
-            "status": "completed",
-            "total_avs": int(scan_results.get("total_avs", 0)),
-            "total_detected": int(scan_results.get("total_detected", 0)),
-            "scan_all_result_a": scan_results.get("scan_all_result_a", ""),
-            "permalink": payload.get("data", {}).get("permalink", "") or payload.get("permalink", ""),
-            "method": "lookup",
-        }
+        if _metadefender_done(scan_results):
+            result = _metadefender_result(scan_results, payload)
+            result["method"] = "lookup"
+            return result
+        return {"status": "pending", "method": "lookup", "reason": "hash scan still in progress"}
 
     if status in (401, 403):
         return {"status": "skipped", "reason": "invalid or unauthorized MetaDefender API key"}
@@ -217,6 +231,16 @@ def metadefender_scan(file_path: Path, sha256: str) -> dict:
 
 def _metadefender_poll(data_id: str, attempts: int = 30, interval: int = 10) -> dict:
     url = f"https://api.metadefender.com/v4/file/{data_id}"
+    return _metadefender_wait(url, attempts, interval, method="upload", extra={"data_id": data_id})
+
+
+def _metadefender_poll_by_hash(sha256: str, attempts: int = 30, interval: int = 10) -> dict:
+    url = f"https://api.metadefender.com/v4/hash/{sha256}"
+    return _metadefender_wait(url, attempts, interval, method="lookup")
+
+
+def _metadefender_wait(url: str, attempts: int, interval: int, method: str, extra: dict | None = None) -> dict:
+    last_verdict = ""
     for _ in range(attempts):
         status, payload, error = _http_json("GET", url, _metadefender_headers())
         _metadefender_sleep()
@@ -225,19 +249,21 @@ def _metadefender_poll(data_id: str, attempts: int = 30, interval: int = 10) -> 
             return {"status": "skipped", "reason": "invalid or unauthorized MetaDefender API key"}
         if status == 200 and isinstance(payload, dict):
             scan_results = payload.get("scan_results", {})
-            progress = int(scan_results.get("progress_percentage", 0)) if scan_results else 0
-            if progress == 100 or scan_results.get("scan_all_result_a") is not None:
-                return {
-                    "status": "completed",
-                    "total_avs": int(scan_results.get("total_avs", 0)),
-                    "total_detected": int(scan_results.get("total_detected", 0)),
-                    "scan_all_result_a": scan_results.get("scan_all_result_a", ""),
-                    "permalink": payload.get("data", {}).get("permalink", "") or payload.get("permalink", ""),
-                    "method": "upload",
-                }
+            last_verdict = str(scan_results.get("scan_all_result_a", ""))
+            if _metadefender_done(scan_results):
+                result = _metadefender_result(scan_results, payload)
+                result["method"] = method
+                return result
         time.sleep(interval)
 
-    return {"status": "timeout", "method": "upload", "data_id": data_id}
+    result = {
+        "status": "timeout",
+        "method": method,
+        "last_verdict": last_verdict,
+        "reason": "scan did not finish in time",
+    }
+    result.update(extra or {})
+    return result
 
 
 def scan_manifest(manifest_path: Path, output_dir: Path) -> Path:
@@ -255,6 +281,9 @@ def scan_manifest(manifest_path: Path, output_dir: Path) -> Path:
         _vt_sleep()
 
         md_result = metadefender_scan(file_path, sha256)
+        if md_result.get("status") == "pending":
+            # Cached hash scan started by someone else: wait for the verdict.
+            md_result = _metadefender_poll_by_hash(sha256)
 
         results.append(
             {
@@ -288,16 +317,31 @@ def scan_manifest(manifest_path: Path, output_dir: Path) -> Path:
 
 
 def _artifact_status(vt: dict, md: dict) -> str:
-    for result in (vt, md):
+    # Timeouts and errors are reported per artifact so they stay visible, even
+    # when the other scanner produced a usable verdict.
+    results = (vt, md)
+    for result in results:
         if result.get("status") == "error":
             return "scanner-error"
-    for result in (vt, md):
+    for result in results:
         if result.get("status") == "timeout":
             return "scanner-timeout"
-    if all(result.get("status") == "skipped" for result in (vt, md)):
+    if all(result.get("status") == "skipped" for result in results):
         return "not-scanned"
+
     detected = vt.get("malicious", 0) + vt.get("suspicious", 0) + md.get("total_detected", 0)
-    return "detected" if detected > 0 else "clean"
+    if detected > 0:
+        return "detected"
+
+    vt_total = sum(vt.get(k, 0) for k in ("harmless", "undetected", "confirmed-timeout"))
+    md_total = md.get("total_avs", 0)
+    if vt.get("status") == "completed" and vt_total > 0:
+        return "clean"
+    if md.get("status") == "completed" and md_total > 0:
+        return "clean"
+    # Scanners answered but no engine produced a verdict (e.g. MetaDefender
+    # still reports 0 engines while its verdict says "In Progress").
+    return "indeterminate"
 
 
 def _render_markdown(report: dict) -> str:
@@ -362,6 +406,9 @@ def _render_markdown(report: dict) -> str:
 
     flagged = [f for f in report["files"] if f.get("status") == "detected"]
     failed = [f for f in report["files"] if f.get("status") in ("scanner-error", "scanner-timeout")]
+    unclear = [
+        f for f in report["files"] if f.get("status") in ("not-scanned", "indeterminate")
+    ]
     if flagged:
         lines.append("## ⚠️ Flagged artifacts")
         lines.append("")
@@ -374,17 +421,23 @@ def _render_markdown(report: dict) -> str:
         for f in failed:
             lines.append(f"- {f['basename']} — {f['status']}: a scanner did not return a result.")
         lines.append("")
-    if not flagged and not failed:
-        lines.append("## Summary")
+    if unclear:
+        lines.append("## ⚠️ Incomplete scans")
         lines.append("")
-        unscanned = [f for f in report["files"] if f.get("status") == "not-scanned"]
+        unscanned = [f for f in unclear if f["status"] == "not-scanned"]
         if unscanned:
             lines.append(
-                f"⚠️ {len(unscanned)} of {len(report['files'])} artifacts were not scanned by any engine "
-                "(scanner API keys missing or invalid). Treat the report as incomplete."
+                f"- {len(unscanned)} artifact(s) were not scanned by any engine "
+                "(scanner API keys missing or invalid)."
             )
-        else:
-            lines.append("All artifacts were scanned and no scanner reported malicious or suspicious detections.")
+        for f in unclear:
+            if f["status"] == "indeterminate":
+                lines.append(f"- {f['basename']} — no engine returned a verdict yet.")
+        lines.append("")
+    if not flagged and not failed and not unclear:
+        lines.append("## Summary")
+        lines.append("")
+        lines.append("All artifacts were scanned and no scanner reported malicious or suspicious detections.")
         lines.append("")
 
     return "\n".join(lines) + "\n"
@@ -405,7 +458,8 @@ def _fmt_vt(vt: dict) -> str:
     if vt.get("status") == "timeout":
         return "timeout"
     total = sum(
-        vt.get(k, 0) for k in ("harmless", "malicious", "suspicious", "undetected", "timeout")
+        vt.get(k, 0)
+        for k in ("harmless", "malicious", "suspicious", "undetected", "timeout", "confirmed-timeout")
     )
     return f"{vt.get('malicious', 0)}/{total} malicious (VT)"
 

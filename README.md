@@ -51,8 +51,8 @@ Each release also includes `scan-report.json` and `scan-report.md` from
 antivirus scanning (VirusTotal + MetaDefender Cloud) and `.sig`/`.cert` files
 for Sigstore/cosign keyless signature verification. Every archive row in the
 scan report has a `status` (`clean`, `detected`, `scanner-error`,
-`scanner-timeout`, or `not-scanned`) so an incomplete scan is visible at a
-glance. See `SECURITY.md` for verification details.
+`scanner-timeout`, `not-scanned`, or `indeterminate`) so an incomplete scan is
+visible at a glance. See `SECURITY.md` for verification details.
 
 > **Note:** Assets without `-auth` do not include OpenSSL, so iperf3's RSA
 > authentication feature is not available. Use the `-auth` archives when you
