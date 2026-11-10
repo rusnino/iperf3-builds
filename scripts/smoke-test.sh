@@ -68,7 +68,7 @@ case "$MODE" in
     if ! command -v "$QEMU_NAME" >/dev/null 2>&1; then
       echo "ERROR: $QEMU_NAME not found; cannot smoke-test $ARCH ($TARGET)" >&2
       if command -v apt-get >/dev/null 2>&1; then
-        echo "Install it with: sudo apt-get install -y binfmt-support qemu-user-static" >&2
+        echo "Install it with: sudo apt-get install -y qemu-user-binfmt (Ubuntu 24.04+) or qemu-user-static (older)" >&2
       fi
       exit 1
     fi

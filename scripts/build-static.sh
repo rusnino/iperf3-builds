@@ -72,7 +72,9 @@ if command -v apt-get >/dev/null 2>&1; then
   echo "=== Installing dependencies via apt-get ==="
   packages="build-essential curl git autoconf automake libtool file xz-utils python3"
   if [ -z "$NATIVE_ARCH" ]; then
-    packages="$packages qemu-user-static"
+    # Ubuntu 24.04+ folds qemu-user-static into qemu-user + qemu-user-binfmt,
+    # while older Debian/Ubuntu still ship qemu-user-static. Try both.
+    packages="$packages qemu-user-binfmt"
   fi
   DEBIAN_FRONTEND=noninteractive $SUDO apt-get update -qq
   DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq $packages
@@ -80,12 +82,23 @@ elif command -v apk >/dev/null 2>&1; then
   echo "=== Installing dependencies via apk ==="
   packages="build-base curl git autoconf automake libtool file xz-utils python3"
   if [ -z "$NATIVE_ARCH" ]; then
-    packages="$packages qemu-user-static"
+    packages="$packages qemu-user-binfmt"
   fi
   apk add --no-cache $packages
 else
   echo "ERROR: No supported package manager found" >&2
   exit 1
+fi
+
+# QEMU user-mode emulators are only needed for cross-architecture smoke tests.
+# Fail early with a clear message instead of a confusing "command not found".
+if [ -z "$NATIVE_ARCH" ]; then
+  if ! command -v qemu-aarch64-static >/dev/null 2>&1 && ! command -v qemu-aarch64 >/dev/null 2>&1; then
+    echo "=== Installing qemu-user-static (fallback for older distributions) ==="
+    if command -v apt-get >/dev/null 2>&1; then
+      DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq qemu-user-static || true
+    fi
+  fi
 fi
 
 # Install the official Zig toolchain.
