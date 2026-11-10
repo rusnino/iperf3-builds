@@ -24,7 +24,9 @@ VT_API_KEY = os.environ.get("VT_API_KEY", "")
 METADEFENDER_API_KEY = os.environ.get("METADEFENDER_API_KEY", "")
 VERSION = os.environ.get("VERSION", "")
 WORKFLOW_REF = os.environ.get("WORKFLOW_REF", "")
-VT_SLEEP_SECONDS = 15  # public free-tier limit is 4 lookups/minute
+VT_LOOKUP_INTERVAL_SECONDS = 15  # public API: 4 requests/minute, 500/day
+VT_POLL_INTERVAL_SECONDS = VT_LOOKUP_INTERVAL_SECONDS
+VT_POLL_ATTEMPTS = 24  # ~6 minutes per artifact at 15s, per scanning phase
 METADEFENDER_SLEEP_SECONDS = 1
 
 
@@ -70,7 +72,7 @@ def _http_json(method: str, url: str, headers: dict, data: Any = None, timeout: 
 
 
 def _vt_sleep():
-    time.sleep(VT_SLEEP_SECONDS)
+    time.sleep(VT_LOOKUP_INTERVAL_SECONDS)
 
 
 def _metadefender_sleep():
@@ -118,7 +120,8 @@ def virustotal_lookup_or_submit(file_path: Path, sha256: str) -> dict:
         return {"status": "skipped", "reason": "invalid or unauthorized VirusTotal API key"}
 
     if status == 404:
-        # Not previously seen: upload the file.
+        # Not previously seen: upload the file. VirusTotal queues the analysis
+        # and returns immediately; poll until the engine set reports back.
         with file_path.open("rb") as fp:
             boundary = "----PythonBoundaryScanArtifact"
             body_prefix = (
@@ -139,34 +142,54 @@ def virustotal_lookup_or_submit(file_path: Path, sha256: str) -> dict:
         if status == 200 and isinstance(payload, dict):
             analysis_id = payload.get("data", {}).get("id", "")
             if analysis_id:
-                return _virustotal_poll_analysis(analysis_id)
+                return _virustotal_wait_for_analysis(sha256, analysis_id)
 
         return {"status": "error", "method": "upload", "http_status": status, "error": error or payload}
 
     return {"status": "error", "method": "lookup", "http_status": status, "error": error or payload}
 
 
-def _virustotal_poll_analysis(analysis_id: str, attempts: int = 10, interval: int = 15) -> dict:
+def _virustotal_ready(stats: dict) -> bool:
+    """True once the engine set produced a verdict (0 engines == still queued)."""
+    return sum(int(stats.get(k, 0)) for k in ("harmless", "malicious", "suspicious", "undetected")) > 0
+
+
+def _virustotal_wait_for_analysis(
+    sha256: str, analysis_id: str, attempts: int = VT_POLL_ATTEMPTS, interval: int = VT_POLL_INTERVAL_SECONDS
+) -> dict:
+    """Poll the analysis, then fall back to the file report for the final stats."""
     url = f"https://www.virustotal.com/api/v3/analyses/{analysis_id}"
     for _ in range(attempts):
         status, payload, error = _http_json("GET", url, _vt_headers())
         if status == 200 and isinstance(payload, dict):
-            analysis_status = payload.get("data", {}).get("attributes", {}).get("status", "")
-            if analysis_status == "completed":
-                stats = payload.get("data", {}).get("attributes", {}).get("stats", {})
-                result = {
-                    "status": "completed",
-                    "harmless": int(stats.get("harmless", 0)),
-                    "malicious": int(stats.get("malicious", 0)),
-                    "suspicious": int(stats.get("suspicious", 0)),
-                    "undetected": int(stats.get("undetected", 0)),
-                    "timeout": int(stats.get("timeout", 0)),
-                    "permalink": f"https://www.virustotal.com/gui/file-analysis/{analysis_id}",
-                    "method": "upload",
-                }
+            attrs = payload.get("data", {}).get("attributes", {})
+            if attrs.get("status") == "completed" and _virustotal_ready(attrs.get("stats", {})):
+                result = _vt_analysis_stats({"last_analysis_stats": attrs.get("stats", {})})
+                result["permalink"] = f"https://www.virustotal.com/gui/file-analysis/{analysis_id}"
+                result["method"] = "upload"
                 return result
-        _vt_sleep()
-    return {"status": "timeout", "method": "upload", "analysis_id": analysis_id}
+        time.sleep(interval)
+
+    # Some scans stay "queued" for a long time; the file report is authoritative
+    # once enough engines have reported.
+    for _ in range(attempts):
+        status, payload, error = _http_json("GET", f"https://www.virustotal.com/api/v3/files/{sha256}", _vt_headers())
+        if status == 200 and isinstance(payload, dict):
+            attrs = payload.get("data", {}).get("attributes", {})
+            stats = attrs.get("last_analysis_stats", {})
+            if _virustotal_ready(stats):
+                result = _vt_analysis_stats(attrs)
+                result["permalink"] = payload.get("data", {}).get("links", {}).get("item", "")
+                result["method"] = "upload"
+                return result
+        time.sleep(interval)
+
+    return {
+        "status": "timeout",
+        "method": "upload",
+        "analysis_id": analysis_id,
+        "reason": "analysis did not finish in time",
+    }
 
 
 def _metadefender_result(scan_results: dict, payload: dict) -> dict:
