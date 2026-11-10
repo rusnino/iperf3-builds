@@ -65,18 +65,30 @@ case "$MODE" in
     "$BINARY" --version
     ;;
   qemu)
-    if ! command -v "$QEMU_NAME" >/dev/null 2>&1; then
+    # targets.json names the -static build; Ubuntu's qemu-user-binfmt only
+    # ships the dynamic emulators plus a binfmt handler.
+    qemu_bin=""
+    for candidate in "$QEMU_NAME" "${QEMU_NAME%-static}" "${QEMU_NAME%-static}-static"; do
+      if command -v "$candidate" >/dev/null 2>&1; then
+        qemu_bin="$candidate"
+        break
+      fi
+    done
+    if [ -z "$qemu_bin" ]; then
       echo "ERROR: $QEMU_NAME not found; cannot smoke-test $ARCH ($TARGET)" >&2
       if command -v apt-get >/dev/null 2>&1; then
         echo "Install it with: sudo apt-get install -y qemu-user-binfmt (Ubuntu 24.04+) or qemu-user-static (older)" >&2
       fi
       exit 1
     fi
-    echo "Running QEMU smoke test for $ARCH ($TARGET) via $QEMU_NAME"
-    "$QEMU_NAME" --version | head -n 1
+    echo "Running QEMU smoke test for $ARCH ($TARGET) via $qemu_bin"
+    "$qemu_bin" --version | head -n 1
     # -L is irrelevant for static musl binaries but harmless; QEMU needs the
     # binary to be executable.
-    QEMU_LD_PREFIX=/ "$QEMU_NAME" "$BINARY" --version
+    if ! QEMU_LD_PREFIX=/ "$qemu_bin" "$BINARY" --version; then
+      echo "ERROR: QEMU could not execute the $ARCH smoke test; check binfmt support (qemu-user-binfmt)" >&2
+      exit 1
+    fi
     ;;
   *)
     echo "ERROR: cannot determine smoke-test mode for $ARCH (mode=$MODE)" >&2
