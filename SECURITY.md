@@ -42,6 +42,11 @@ archive to two independent, multi-engine services:
 - **MetaDefender Cloud** (secondary) — hash lookup, falling back to uploading the
   file for scanning via MetaDefender Cloud API v4.
 
+The job uses the VirusTotal **free public API**, which is rate limited to
+4 requests per minute and 500 per day. New archives are uploaded and then polled
+at one request per 15 seconds, so a full 34-archive release takes roughly
+30 minutes; the job has a 120-minute limit.
+
 Results are stored in `scan-report.json` and a human-readable `scan-report.md`,
 both of which are uploaded back to the GitHub release. Every archive row carries
 a `status`:

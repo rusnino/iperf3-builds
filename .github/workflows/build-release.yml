@@ -354,6 +354,9 @@ jobs:
   scan-release-artifacts:
     needs: [release, sign-release]
     runs-on: ubuntu-latest
+    # VirusTotal's free public API allows 4 requests/minute and 500/day. With 34
+    # archives that are polled at 15s intervals, a scan can run for ~30 minutes.
+    timeout-minutes: 120
     permissions:
       contents: write
     steps:
