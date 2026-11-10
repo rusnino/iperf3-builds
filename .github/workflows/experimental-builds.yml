@@ -1,0 +1,98 @@
+name: Experimental architecture builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Upstream iperf3 version/tag to build (e.g. 3.22)'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: experimental-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  generate-experimental-matrix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Generate matrix from targets.json
+        id: set
+        run: |
+          set -euo pipefail
+          matrix=$(python3 scripts/matrix/experimental.py targets.json)
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+
+  build-experimental:
+    needs: generate-experimental-matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-experimental-matrix.outputs.matrix) }}
+    steps:
+      - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: version input is empty" >&2
+            exit 1
+          fi
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]] || ! [[ "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+            echo "ERROR: invalid version input: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install QEMU user-mode emulators
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq binfmt-support qemu-user-static
+
+      - name: Build static (${{ matrix.arch }}) binary
+        env:
+          IPERF_VERSION: ${{ inputs.version }}
+          ARCH: ${{ matrix.arch }}
+          AUTH: ${{ matrix.auth }}
+        run: |
+          set -euo pipefail
+          ./scripts/build-static.sh
+
+      - name: Smoke test (${{ matrix.arch }}${{ matrix.auth && ' -auth' || '' }})
+        env:
+          ARCH: ${{ matrix.arch }}
+          AUTH: ${{ matrix.auth }}
+        run: |
+          set -euo pipefail
+          suffix=""
+          if [ "$AUTH" = "true" ]; then
+            suffix="-auth"
+          fi
+          workdir="$(mktemp -d)"
+          archive="$(ls "iperf3-"*"-linux-${ARCH}-static${suffix}.tar.gz" | head -n1)"
+          tar -xzf "$archive" -C "$workdir"
+          ./scripts/smoke-test.sh "$ARCH" "${workdir}/${archive%.tar.gz}/iperf3"
+
+      - name: Upload experimental artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: experimental-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}
+          path: iperf3-*-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}.tar.gz
+          if-no-files-found: error
+          retention-days: 30

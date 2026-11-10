@@ -47,6 +47,13 @@ Each upstream release produces the following assets:
 A `SHA256SUMS` file is included with every release so you can verify the
 archives.
 
+Each release also includes `scan-report.json` and `scan-report.md` from
+antivirus scanning (VirusTotal + MetaDefender Cloud) and `.sig`/`.cert` files
+for Sigstore/cosign keyless signature verification. Every archive row in the
+scan report has a `status` (`clean`, `detected`, `scanner-error`,
+`scanner-timeout`, or `not-scanned`) so an incomplete scan is visible at a
+glance. See `SECURITY.md` for verification details.
+
 > **Note:** Assets without `-auth` do not include OpenSSL, so iperf3's RSA
 > authentication feature is not available. Use the `-auth` archives when you
 > need authentication.
@@ -74,6 +81,11 @@ OpenSSL built from upstream source.  Every archive contains a `MANIFEST.json` wi
 exact target triple, CPU/ABI metadata, compiler versions, and smoke-test status used
 during the build.
 
+Every archive is smoke-tested in CI before it is uploaded: binaries for the build
+host architecture run natively, everything else runs under QEMU user-mode
+emulation (`./scripts/smoke-test.sh <arch> <binary>`). A target whose emulator is
+missing fails the build instead of silently skipping the test.
+
 | Target | ISA / CPU baseline | ABI | Endianness | FPU requirements | Auth | Testing | Limitations |
 |---|---|---|---|---|---|---|---|
 | `x86_64` | x86-64 | sysv | little | none | yes | native `--version` smoke test | none |
@@ -91,6 +103,26 @@ during the build.
 | `s390x` | IBM z/Architecture | sysv | big | none | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
 | `riscv64` | RV64GC (RISC-V 64-bit) | lp64 | little | none | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
 | `loongarch64` | LoongArch64 | sysv | little | none | yes | QEMU user-mode `--version` smoke test | user-mode emulation only |
+
+### Experimental Linux static targets
+
+The following targets are built only by the manually triggered
+`experimental-builds.yml` workflow. They are not published as release assets
+until they are promoted to stable.
+
+| Target | Status | Auth | ISA / CPU baseline | ABI | Endianness | Testing | Known issues |
+|---|---|---|---|---|---|---|---|
+| `ppc64` | experimental | yes | 64-bit PowerPC | ELFv1 | big | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `riscv32` | experimental | yes | RISC-V 32-bit | ilp32 | little | QEMU user-mode `--version` smoke test | user-mode emulation only |
+| `armeb` | experimental | no | ARM 32-bit big-endian | EABI soft-float | big | QEMU user-mode `--version` smoke test | no OpenSSL Configure target; plain-only |
+| `mipsn32` | experimental | no | MIPS64 n32 ABI | n32 soft-float | big | QEMU user-mode `--version` smoke test | no OpenSSL n32 ABI target; plain-only |
+| `mipsn32el` | experimental | no | MIPS64 n32 ABI | n32 soft-float | little | QEMU user-mode `--version` smoke test | no OpenSSL n32 ABI target; plain-only |
+| `aarch64_be` | experimental | no | ARM64 big-endian | sysv | big | QEMU user-mode `--version` smoke test | no OpenSSL Configure target; plain-only |
+| `hexagon` | experimental | no | Qualcomm Hexagon | sysv | little | QEMU user-mode `--version` smoke test | no OpenSSL Configure target; plain-only |
+
+Promotion to stable requires passing builds for at least two consecutive
+upstream releases, successful ELF verification, and documented QEMU smoke tests
+for all built variants.
 
 ### Other variants
 

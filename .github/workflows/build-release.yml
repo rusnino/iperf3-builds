@@ -8,8 +8,7 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: release-${{ inputs.version }}
@@ -18,31 +17,27 @@ concurrency:
 jobs:
   generate-linux-static-matrix:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Generate matrix from targets.json
         id: set
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json
-          data = json.load(open('targets.json'))
-          matrix = {'include': []}
-          for arch, meta in data['arch'].items():
-              matrix['include'].append({'arch': arch, 'auth': False})
-              if meta.get('auth', True):
-                  matrix['include'].append({'arch': arch, 'auth': True})
-          print(json.dumps(matrix))
-          PY > matrix.json
-          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+          matrix=$(python3 scripts/matrix/stable.py targets.json)
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
 
   build-linux-static:
     needs: generate-linux-static-matrix
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.generate-linux-static-matrix.outputs.matrix) }}
@@ -56,13 +51,13 @@ jobs:
             echo "ERROR: version input is empty" >&2
             exit 1
           fi
-          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]] || ! [[ "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]]; then
             echo "ERROR: invalid version input: $VERSION" >&2
             exit 1
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Build static (${{ matrix.arch }}) binary
         env:
@@ -73,15 +68,34 @@ jobs:
           set -euo pipefail
           ./scripts/build-static.sh
 
+      - name: Smoke test (${{ matrix.arch }}${{ matrix.auth && ' -auth' || '' }})
+        env:
+          ARCH: ${{ matrix.arch }}
+          AUTH: ${{ matrix.auth }}
+        run: |
+          set -euo pipefail
+          suffix=""
+          if [ "$AUTH" = "true" ]; then
+            suffix="-auth"
+          fi
+          workdir="$(mktemp -d)"
+          archive="$(ls "iperf3-"*"-linux-${ARCH}-static${suffix}.tar.gz" | head -n1)"
+          tar -xzf "$archive" -C "$workdir"
+          ./scripts/smoke-test.sh "$ARCH" "${workdir}/${archive%.tar.gz}/iperf3"
+
       - name: Upload static artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: release-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}
           path: iperf3-*-linux-${{ matrix.arch }}-static${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
+          retention-days: 30
 
   build-dynamic:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -98,7 +112,7 @@ jobs:
             echo "ERROR: version input is empty" >&2
             exit 1
           fi
-          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]] || ! [[ "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]]; then
             echo "ERROR: invalid version input: $VERSION" >&2
             exit 1
           fi
@@ -107,7 +121,7 @@ jobs:
         run: yum install -y git
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Build dynamic (glibc) binary
         env:
@@ -118,14 +132,18 @@ jobs:
           ./scripts/build-dynamic.sh
 
       - name: Upload dynamic artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: release-linux-x86_64-dynamic${{ matrix.auth && '-auth' || '' }}
           path: iperf3-build-dynamic${{ matrix.auth && '-auth' || '' }}/iperf3-*-linux-x86_64-dynamic${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
+          retention-days: 30
 
   build-macos-x86_64:
     runs-on: macos-26-intel
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -140,13 +158,13 @@ jobs:
             echo "ERROR: version input is empty" >&2
             exit 1
           fi
-          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]] || ! [[ "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]]; then
             echo "ERROR: invalid version input: $VERSION" >&2
             exit 1
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Build macOS x86_64 binary
         env:
@@ -156,14 +174,18 @@ jobs:
         run: ./scripts/build-macos-arch.sh
 
       - name: Upload x86_64 binary artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: build-macos-x86_64${{ matrix.auth && '-auth' || '' }}
           path: macos-build-x86_64${{ matrix.auth && '-auth' || '' }}/*
           if-no-files-found: error
+          retention-days: 30
 
   build-macos-arm64:
     runs-on: macos-26
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -178,13 +200,13 @@ jobs:
             echo "ERROR: version input is empty" >&2
             exit 1
           fi
-          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]]; then
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]] || ! [[ "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]]; then
             echo "ERROR: invalid version input: $VERSION" >&2
             exit 1
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Build macOS arm64 binary
         env:
@@ -194,31 +216,35 @@ jobs:
         run: ./scripts/build-macos-arch.sh
 
       - name: Upload arm64 binary artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: build-macos-arm64${{ matrix.auth && '-auth' || '' }}
           path: macos-build-arm64${{ matrix.auth && '-auth' || '' }}/*
           if-no-files-found: error
+          retention-days: 30
 
   package-macos-universal:
     needs: [build-macos-x86_64, build-macos-arm64]
     runs-on: macos-26
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
         auth: [false, true]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Download macOS x86_64 binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: build-macos-x86_64${{ matrix.auth && '-auth' || '' }}
           path: macos-build-x86_64${{ matrix.auth && '-auth' || '' }}
 
       - name: Download macOS arm64 binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           name: build-macos-arm64${{ matrix.auth && '-auth' || '' }}
           path: macos-build-arm64${{ matrix.auth && '-auth' || '' }}
@@ -230,11 +256,12 @@ jobs:
         run: ./scripts/build-macos-universal.sh
 
       - name: Upload universal2 artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: release-macos-universal2${{ matrix.auth && '-auth' || '' }}
           path: iperf3-*-macos-universal2${{ matrix.auth && '-auth' || '' }}.tar.gz
           if-no-files-found: error
+          retention-days: 30
 
   release:
     needs:
@@ -244,12 +271,15 @@ jobs:
       - build-macos-arm64
       - package-macos-universal
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Download artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           path: artifacts
           pattern: release-*
@@ -321,6 +351,127 @@ jobs:
               iperf3-*.tar.gz SHA256SUMS
           fi
 
+  scan-release-artifacts:
+    needs: [release, sign-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: version input is empty" >&2
+            exit 1
+          fi
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]] || ! [[ "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+            echo "ERROR: invalid version input: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          gh release download "$VERSION" --dir artifacts --repo ${{ github.repository }}
+          ls -la artifacts
+
+      - name: Run antivirus scan
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+          METADEFENDER_API_KEY: ${{ secrets.METADEFENDER_API_KEY }}
+          VERSION: ${{ inputs.version }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          set -euo pipefail
+          ./scripts/scan-artifacts.sh artifacts
+
+      - name: Upload scan reports to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          gh release upload "$VERSION" \
+            artifacts/scan-reports/scan-report.json \
+            artifacts/scan-reports/scan-report.md \
+            --clobber --repo ${{ github.repository }}
+
+  sign-release:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: version input is empty" >&2
+            exit 1
+          fi
+          if [[ "$VERSION" == *[/\\]* || "$VERSION" == *..* ]] || ! [[ "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+            echo "ERROR: invalid version input: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
+        with:
+          cosign-release: v2.6.5
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p sign
+          gh release download "$VERSION" --dir sign --repo ${{ github.repository }}
+          ls -la sign
+
+      - name: Sign release artifacts with cosign keyless
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          cd sign
+          for asset in iperf3-*.tar.gz; do
+            [ -f "$asset" ] || continue
+            echo "Signing $asset..."
+            cosign sign-blob --yes \
+              --output-signature="${asset}.sig" \
+              --output-certificate="${asset}.cert" \
+              "$asset"
+          done
+          ls -la *.sig *.cert
+
+      - name: Upload signatures to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          cd sign
+          gh release upload "$VERSION" \
+            iperf3-*.tar.gz.sig \
+            iperf3-*.tar.gz.cert \
+            --clobber --repo ${{ github.repository }}
+
   retry-failed-jobs:
     needs:
       - build-linux-static
@@ -329,6 +480,8 @@ jobs:
       - build-macos-arm64
       - package-macos-universal
       - release
+      - scan-release-artifacts
+      - sign-release
     runs-on: ubuntu-latest
     if: failure() && github.run_attempt < 3
     permissions:
