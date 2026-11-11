@@ -144,6 +144,11 @@ A GitHub Actions workflow runs daily at 04:00 UTC, checks the last 10 upstream
 releases, and builds any missing ones. Maintainers can also trigger a build
 manually from the **Actions → Build and Release → Run workflow** tab.
 
+The badges at the top of this file are generated from the `scan-report.json` of
+the latest release by `scripts/update-readme-badges.py`, which runs at the end
+of each scan. A partial badge means the free VirusTotal tier did not finish
+within its rate limit; the full per-archive result is in `scan-report.md`.
+
 ## License
 
 The build scripts in this repository are released under the same license as
