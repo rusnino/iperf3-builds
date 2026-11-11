@@ -2,6 +2,11 @@
 
 [![Latest Release](https://img.shields.io/github/v/release/rusnino/iperf3-builds?sort=semver)](https://github.com/rusnino/iperf3-builds/releases/latest)
 [![Build and Release](https://img.shields.io/github/actions/workflow/status/rusnino/iperf3-builds/build-release.yml?logo=github)](https://github.com/rusnino/iperf3-builds/actions/workflows/build-release.yml)
+<!-- AV-BADGES:BEGIN -->
+[![VirusTotal: 33/34 partial](https://img.shields.io/badge/VirusTotal-33%2F34%20partial-yellow)](https://github.com/rusnino/iperf3-builds/releases/download/3.22/scan-report.md)
+[![MetaDefender: 34/34](https://img.shields.io/badge/MetaDefender-34%2F34-brightgreen)](https://github.com/rusnino/iperf3-builds/releases/download/3.22/scan-report.md)
+[![malware: 0 detections](https://img.shields.io/badge/malware-0%20detections-brightgreen)](https://github.com/rusnino/iperf3-builds/releases/download/3.22/scan-report.md)
+<!-- AV-BADGES:END -->
 
 Automated builds of [esnet/iperf](https://github.com/esnet/iperf) for Linux
 (x86_64, x86, ARM64, ARMv5/ARMv6/ARMv7, MIPS, PowerPC, s390x, RISC-V 64,
